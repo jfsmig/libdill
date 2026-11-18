@@ -193,6 +193,9 @@ int main() {
     rc = brecv(s[1], buf, 3, -1);
     errno_assert(rc == 0);
     assert(buf[0] == 'G' && buf[1] == 'H' && buf[2] == 'I');
+    /* Skipping more data than there is times out like any other receive. */
+    rc = brecv(s[1], NULL, 3, now() + 10);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
     rc = hclose(s[0]);
     errno_assert(rc == 0);
     rc = hclose(s[1]);
@@ -212,6 +215,11 @@ int main() {
     errno_assert(rc == 0);
     assert(bufx[0] == 'A' && bufx[1] == 'B' && bufx[2] == 'C');
     assert(bufy[0] == 'G' && bufy[1] == 'H' && bufy[2] == 'I');
+    /* Skipping past the end of the stream is reported. */
+    rc = ipc_done(s[0], -1);
+    errno_assert(rc == 0);
+    rc = brecv(s[1], NULL, 3, -1);
+    errno_assert(rc == -1 && errno == EPIPE);
     rc = hclose(s[0]);
     errno_assert(rc == 0);
     rc = hclose(s[1]);
