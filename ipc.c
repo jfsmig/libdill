@@ -243,6 +243,22 @@ int dill_ipc_sendfd(int s, int fd, int64_t deadline) {
     return 0;
 }
 
+/* An SCM_RIGHTS message can carry several file descriptors, and all of
+   them are open in this process once the message is received, while
+   dill_ipc_recvfd() can hand over only one. Returns fd if it is already
+   valid, the first descriptor of the message otherwise, and closes the
+   remaining ones so that they don't leak. */
+static int dill_ipc_keepfirstfd(struct cmsghdr *cmsg, int fd) {
+    int *fds = (int*)CMSG_DATA(cmsg);
+    size_t nfds = (cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int);
+    size_t i;
+    for(i = 0; i != nfds; ++i) {
+        if(fd < 0) fd = fds[i];
+        else close(fds[i]);
+    }
+    return fd;
+}
+
 int dill_ipc_recvfd(int s, int64_t deadline) {
     struct dill_ipc_conn *self = dill_hquery(s, dill_ipc_type);
     if(dill_slow(!self)) return -1;
@@ -274,8 +290,7 @@ int dill_ipc_recvfd(int s, int64_t deadline) {
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
     while(cmsg) {
         if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type  == SCM_RIGHTS) {
-            fd = *(int*)CMSG_DATA(cmsg);
-            break;
+            fd = dill_ipc_keepfirstfd(cmsg, fd);
         }
         cmsg = CMSG_NXTHDR(&msg, cmsg);
     }
