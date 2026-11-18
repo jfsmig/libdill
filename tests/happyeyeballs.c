@@ -289,6 +289,21 @@ int main(void) {
     assert(rc == 5);
     end_test();
 
+    /* The 300ms between two attempts are counted from the launch of the
+       first one, however long its address took to arrive. The second IPv4
+       address must not be tried, as the first one connects in 100ms. */
+    struct step test13[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 10,  0, 0, 1},
+        {OP_REMOTES, DILL_IPADDR_IPV4, NULL, 700, 0, 0, 2},
+        {OP_CONNECT, 0, "2001::1",     2000, 1, 0, 0},
+        {OP_CONNECT, 0, "192.168.0.1", 100,  0, 0, 5},
+        {OP_END}
+    };
+    start_test(test13, "test13");
+    rc = dill_happyeyeballs_connect("www.example.org", 80, -1);
+    assert(rc == 5);
+    end_test();
+
     return 0;
 }
 
