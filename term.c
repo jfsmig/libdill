@@ -145,10 +145,12 @@ int dill_term_detach(int s, int64_t deadline) {
         }
     }
     int u = self->u;
-    if(!self->mem) free(self);
-    return u;
-error:;
+    self->u = -1;
     int rc = dill_hclose(s);
+    dill_assert(rc == 0);
+    return u;
+error:
+    rc = dill_hclose(s);
     dill_assert(rc == 0);
     errno = err;
     return -1;

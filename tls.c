@@ -277,10 +277,12 @@ int dill_tls_detach(int s, int64_t deadline) {
     }
     int u = self->u;
     self->u = -1;
-    dill_tls_hclose(&self->hvfs);
+    int rc = dill_hclose(s);
+    dill_assert(rc == 0);
     return u;
 error:
-    dill_tls_hclose(&self->hvfs);
+    rc = dill_hclose(s);
+    dill_assert(rc == 0);
     errno = err;
     return -1;
 }

@@ -121,7 +121,9 @@ int dill_suffix_detach(int s, int64_t deadline) {
     if(dill_slow(!self)) {err = errno; goto error;}
     if(dill_slow(self->inerr || self->outerr)) {err = ECONNRESET; goto error;}
     int u = self->u;
-    if(!self->mem) free(self);
+    self->u = -1;
+    int rc = dill_hclose(s);
+    dill_assert(rc == 0);
     return u;
 error:
     if(s >= 0) dill_hclose(s);
