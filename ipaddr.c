@@ -192,7 +192,7 @@ int dill_ipaddr_local(struct dill_ipaddr *addr, const char *name, int port,
     /* Address is not a literal. It must be an interface name then. */
     struct ifaddrs *ifaces = NULL;
     rc = getifaddrs (&ifaces);
-    dill_assert (rc == 0);
+    if(dill_slow(rc < 0)) return -1;
     dill_assert (ifaces);
     /*  Find first IPv4 and first IPv6 address. */
     struct ifaddrs *ipv4 = NULL;
