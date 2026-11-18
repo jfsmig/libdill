@@ -33,6 +33,35 @@
 
 #define TESTADDR "ipc.test"
 
+/* shutdown() fails for reasons that depend on the system and that cannot be
+   provoked at will. To see such a failure reported, the socket is replaced by
+   a pipe behind the library's back. */
+static void test_done_failure(void) {
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    errno_assert(fd >= 0);
+    /* ipc_fromfd() keeps a duplicate of the descriptor. A duplicate gets the
+       lowest free number, so that number can be found out in advance. */
+    int dupfd = dup(fd);
+    errno_assert(dupfd >= 0);
+    int rc = close(dupfd);
+    errno_assert(rc == 0);
+    int s = ipc_fromfd(fd);
+    errno_assert(s >= 0);
+    int pipefd[2];
+    rc = pipe(pipefd);
+    errno_assert(rc == 0);
+    rc = dup2(pipefd[0], dupfd);
+    errno_assert(rc == dupfd);
+    rc = close(pipefd[0]);
+    errno_assert(rc == 0);
+    rc = close(pipefd[1]);
+    errno_assert(rc == 0);
+    rc = ipc_done(s, -1);
+    errno_assert(rc == -1 && errno == ENOTSOCK);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+}
+
 coroutine void client(void) {
     int cs = ipc_connect(TESTADDR, -1);
     errno_assert(cs >= 0);
@@ -78,6 +107,8 @@ coroutine void client4(int s) {
 
 int main() {
     char buf[16];
+
+    test_done_failure();
 
     /* Test deadline. */
     struct stat st;
