@@ -21,6 +21,7 @@
 */
 
 #include <errno.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -466,7 +467,10 @@ int dill_wait(void)  {
                     int64_t deadline = dill_cont(
                         dill_rbtree_first(&ctx->timers),
                         struct dill_tmclause, item)->item.val;
-                    timeout = (int) (nw >= deadline ? 0 : deadline - nw);
+                    /* A deadline too far away for the timeout to express
+                       is waited for in several rounds. */
+                    int64_t left = nw >= deadline ? 0 : deadline - nw;
+                    timeout = left > INT_MAX ? INT_MAX : (int)left;
                 }
             }
             /* Wait for events. */
