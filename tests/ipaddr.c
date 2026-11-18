@@ -129,5 +129,13 @@ int main(void) {
     rc = ipaddr_equal(&addr1, &addr2, 0);
     assert(rc == 0);
 
+    /* A name too long to be a host name is an error. So is, before the name
+       gets looked at, the absence of DNS configuration on this machine. */
+    char longname[300];
+    memset(longname, 'a', sizeof(longname) - 1);
+    longname[sizeof(longname) - 1] = 0;
+    rc = ipaddr_remote(&addr, longname, 5555, IPADDR_IPV4, -1);
+    assert(rc == -1 && (errno == ENAMETOOLONG || errno == ENOENT));
+
     return 0;
 }
