@@ -256,6 +256,20 @@ int main() {
     rc = hclose(s[1]);
     errno_assert(rc == 0);
 
+    /* Without an iolist the data is dropped up to the end of the stream. */
+    rc = ipc_pair(s);
+    errno_assert(rc == 0);
+    rc = bsend(s[0], "ABC", 3, -1);
+    errno_assert(rc == 0);
+    rc = ipc_done(s[0], -1);
+    errno_assert(rc == 0);
+    rc = brecvl(s[1], NULL, NULL, -1);
+    errno_assert(rc == -1 && errno == EPIPE);
+    rc = hclose(s[0]);
+    errno_assert(rc == 0);
+    rc = hclose(s[1]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
