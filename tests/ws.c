@@ -96,6 +96,21 @@ int main(void) {
     rc = hclose(cr);
     errno_assert(rc == 0);
 
+    /* The request key is a base64-encoded 16-byte nonce. It comes from the
+       peer, so it may hold bytes that are not ASCII; none of them is a base64
+       character. */
+    char response_key[WS_KEY_SIZE];
+    rc = ws_response_key("dGhlIHNhbXBsZSBub25jZQ==", response_key);
+    errno_assert(rc == 0);
+    assert(strcmp(response_key, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=") == 0);
+    int byte;
+    for(byte = 0x80; byte != 0x100; ++byte) {
+        char request_key[] = "dGhlIHNhbXBsZSBub25jZQ==";
+        request_key[0] = (char)byte;
+        rc = ws_response_key(request_key, response_key);
+        assert(rc == -1 && errno == EPROTO);
+    }
+
     rc = ipc_pair(p);
     errno_assert(rc == 0);
     cr = go(http_client(p[1]));
