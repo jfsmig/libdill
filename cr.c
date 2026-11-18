@@ -127,6 +127,21 @@ static void dill_bundle_close(struct dill_hvfs *vfs) {
     if(!self->mem) free(self);
 }
 
+/* The clause dill_bundle_wait() waits on. */
+struct dill_bundle_clause {
+    struct dill_clause cl;
+    struct dill_bundle *bundle;
+};
+
+/* Unregisters the waiter as soon as it is resumed, whatever the reason, so
+   that a coroutine finishing before the waiter gets to run does not resume
+   it a second time. */
+static void dill_bundle_wait_cancel(struct dill_clause *cl) {
+    struct dill_bundle_clause *bcl =
+        dill_cont(cl, struct dill_bundle_clause, cl);
+    bcl->bundle->waiter = NULL;
+}
+
 int dill_bundle_wait(int h, int64_t deadline) {
     int rc = dill_canblock();
     if(dill_slow(rc < 0)) return -1;
@@ -135,13 +150,13 @@ int dill_bundle_wait(int h, int64_t deadline) {
     /* If there are no coroutines in the bundle succeed immediately. */
     if(dill_list_empty(&self->crs)) return 0;
     /* Otherwise wait for all coroutines to finish. */
-    struct dill_clause cl;
-    self->waiter = &cl;
-    dill_waitfor(&cl, 0, NULL);
+    struct dill_bundle_clause bcl;
+    bcl.bundle = self;
+    self->waiter = &bcl.cl;
+    dill_waitfor(&bcl.cl, 0, dill_bundle_wait_cancel);
     struct dill_tmclause tmcl;
     dill_timer(&tmcl, 1, deadline);
     int id = dill_wait();
-    self->waiter = NULL;
     if(dill_slow(id < 0)) return -1;
     if(dill_slow(id == 1)) {errno = ETIMEDOUT; return -1;}
     dill_assert(id == 0);
