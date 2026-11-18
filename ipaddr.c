@@ -205,12 +205,10 @@ int dill_ipaddr_local(struct dill_ipaddr *addr, const char *name, int port,
             continue;
         switch(it->ifa_addr->sa_family) {
         case AF_INET:
-            dill_assert(!ipv4);
-            ipv4 = it;
+            if(!ipv4) ipv4 = it;
             break;
         case AF_INET6:
-            dill_assert(!ipv6);
-            ipv6 = it;
+            if(!ipv6) ipv6 = it;
             break;
         }
         if(ipv4 && ipv6)
