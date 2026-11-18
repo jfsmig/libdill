@@ -24,6 +24,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <string.h>
 
@@ -61,6 +62,20 @@ int main(void) {
     assert(port == 5555);
     ipaddr_str(&addr, buf);
     assert(strcmp(buf, "::1") == 0);
+
+    /* Looking an interface up when the system cannot list the interfaces is
+       an error. Listing them needs a file descriptor on some systems. */
+    struct rlimit nofile;
+    rc = getrlimit(RLIMIT_NOFILE, &nofile);
+    errno_assert(rc == 0);
+    struct rlimit nofile_none = nofile;
+    nofile_none.rlim_cur = 0;
+    rc = setrlimit(RLIMIT_NOFILE, &nofile_none);
+    errno_assert(rc == 0);
+    rc = ipaddr_local(&addr, "no-such-interface", 5555, 0);
+    assert(rc == -1 && (errno == EMFILE || errno == ENODEV));
+    rc = setrlimit(RLIMIT_NOFILE, &nofile);
+    errno_assert(rc == 0);
 
     /* Test IP address comparisons. */
     struct ipaddr addr1;
