@@ -49,9 +49,10 @@ int dill_iolcheck(struct iolist *first, struct iolist *last,
     if(nbufs) *nbufs = nbf;
     if(nbytes) *nbytes = nbt;
     return 0;
-error:;
-    struct iolist *it2;
-    for(it2 = first; it2 != it; it2 = it2->iol_next) it->iol_rsvd = 0;
+error:
+    /* Unmark the items marked above. The walk is counted because in a looped
+       list the offending item is one of them and cannot be used to stop it. */
+    for(it = first; nbf; it = it->iol_next, nbf--) it->iol_rsvd = 0;
     errno = EINVAL;
     return -1;
 }
