@@ -261,13 +261,18 @@ int dill_ipc_recvfd(int s, int64_t deadline) {
     unsigned char control[1024];
     msg.msg_control = control;
     msg.msg_controllen = sizeof(control);
-    int rc = dill_fdin(self->fd, deadline);
-    if(dill_slow(rc < 0)) return -1;
-    ssize_t sz = recvmsg(self->fd, &msg, 0);
-    if(dill_slow(sz == 0)) {self->indone = 1; errno = EPIPE; return -1;}
-    if(dill_slow(sz < 0)) {
-       if(errno == ECONNRESET) {self->outerr = 1; return -1;}
-       dill_assert(0);
+    /* A failed attempt consumes nothing from the stream. Only the loss of
+       the peer makes the connection unusable for further receiving. */
+    while(1) {
+        int rc = dill_fdin(self->fd, deadline);
+        if(dill_slow(rc < 0)) return -1;
+        ssize_t sz = recvmsg(self->fd, &msg, 0);
+        if(dill_fast(sz > 0)) break;
+        if(dill_slow(sz == 0)) {self->indone = 1; errno = EPIPE; return -1;}
+        if(errno == EWOULDBLOCK || errno == EAGAIN) continue;
+        if(errno == EPIPE || errno == ECONNRESET) {
+            self->inerr = 1; errno = ECONNRESET; return -1;}
+        return -1;
     }
     /* Loop over the auxiliary data to find the embedded file descriptor. */
     int fd = -1;
