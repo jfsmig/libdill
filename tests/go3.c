@@ -40,6 +40,22 @@ coroutine void worker(void) {
     ++worker_done;
 }
 
+static int nested_done = 0;
+
+coroutine void leaf(void) {
+    int rc = msleep(-1);
+    assert(rc == -1 && errno == ECANCELED);
+    ++nested_done;
+}
+
+coroutine void mid(void) {
+    int h = go(leaf());
+    errno_assert(h >= 0);
+    int rc = hclose(h);
+    errno_assert(rc == 0);
+    ++nested_done;
+}
+
 int main() {
     /* Test whether immediate cancelation works. */
     int cr1 = go(worker());
@@ -57,6 +73,16 @@ int main() {
     rc = hclose(cr3);
     errno_assert(rc == 0);
     assert(worker_done == 3);
+
+    /* Test closing a coroutine that is itself waiting inside hclose()
+       of its child. */
+    int cr4 = go(mid());
+    errno_assert(cr4 >= 0);
+    rc = yield();
+    errno_assert(rc == 0);
+    rc = hclose(cr4);
+    errno_assert(rc == 0);
+    assert(nested_done == 2);
 
     return 0;
 }
