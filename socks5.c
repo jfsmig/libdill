@@ -203,14 +203,14 @@ int dill_socks5_proxy_auth(int s, dill_socks5_auth_function *auth_fn,
         resp[1] = S5AUTH_FAIL;
         err = dill_bsend(s, (void *)resp, 2, deadline);
         if(dill_slow(err)) return -1;
-        return -1;
+        errno = EACCES; return -1;
     }
     // no compatible AUTH (auth fail)
     resp[0] = RFC1928_VER; // VER
     resp[1] = S5METH_NOMETHOD;
     err = dill_bsend(s, (void *)resp, 2, deadline);
     if(dill_slow(err)) return -1;
-    return -1;
+    errno = EACCES; return -1;
 accept_noauth:
     // accept NOAUTH, no further auth req'd
     resp[0] = RFC1928_VER; // VER
@@ -248,7 +248,8 @@ static int s5_ipaddr_to_s5addr(_socks5_addr *s5, struct dill_ipaddr *addr) {
             memcpy((void *)s5->addr, (void *)&ipv6->sin6_addr, s5->alen);
             return 0;}
     }
-    return -1;
+    // SOCKS5 has no representation for other address families
+    errno = EINVAL; return -1;
 }
 
 static int s5_s5addr_to_ipaddr(struct dill_ipaddr *addr, _socks5_addr *s5,
