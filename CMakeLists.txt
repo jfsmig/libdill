@@ -153,6 +153,7 @@ if(BUILD_TESTING)
         tests/threads2.c
         tests/tls.c
         tests/udp.c
+        tests/utils.c
         tests/ws.c)
     foreach(test_file IN LISTS test_files)
       get_filename_component(test_name ${test_file} NAME_WE)
