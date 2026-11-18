@@ -67,7 +67,7 @@ static void *dill_term_hquery(struct dill_hvfs *hvfs, const void *type) {
 int dill_term_attach_mem(int s, const void *buf, size_t len,
       struct dill_term_storage *mem) {
     int err;
-    if(dill_slow(!mem && len > DILL_MAX_TERMINATOR_LENGTH)) {
+    if(dill_slow(!mem || len > DILL_MAX_TERMINATOR_LENGTH)) {
         err = EINVAL; goto error;}
     if(dill_slow(len > 0 && !buf)) {err = EINVAL; goto error;}
     /* Take ownership of the underlying socket. */
