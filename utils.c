@@ -104,9 +104,9 @@ const char *dill_lstrip(const char *string, char delim) {
 }
 
 const char *dill_rstrip(const char *string, char delim) {
-    const char *end = string + strlen(string) - 1;
-    while(end > string && *end == delim) --end;
-    return ++end;
+    const char *end = string + strlen(string);
+    while(end > string && *(end - 1) == delim) --end;
+    return end;
 }
 
 int dill_random(uint8_t *buf, size_t len) {
