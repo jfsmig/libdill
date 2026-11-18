@@ -65,6 +65,18 @@ int main(void) {
         break;
     }
 
+    /* A packet larger than the buffer is an error, not a shorter packet. */
+    while(1) {
+        rc = msend(s2, "DEF", 3, -1);
+        errno_assert(rc == 0);
+        char small[2];
+        ssize_t sz = udp_recv(s1, NULL, small, sizeof(small), now() + 100);
+        if(sz < 0 && errno == ETIMEDOUT)
+            continue;
+        errno_assert(sz == -1 && errno == EMSGSIZE);
+        break;
+    }
+
     rc = hclose(s2);
     errno_assert(rc == 0);
     rc = hclose(s1);
