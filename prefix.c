@@ -140,6 +140,8 @@ static int dill_prefix_msendl(struct dill_msock_vfs *mvfs,
         szbuf[self->bigendian ? (self->hdrlen - i - 1) : i] = sz & 0xff;
         sz >>= 8;
     }
+    /* Whatever is left of the size did not fit into the header. */
+    if(dill_slow(sz)) {errno = EMSGSIZE; return -1;}
     struct dill_iolist hdr = {szbuf, sizeof(szbuf), first, 0};
     int rc = dill_bsendl(self->u, &hdr, last, deadline);
     if(dill_slow(rc < 0)) {self->outerr = 1; return -1;}
