@@ -133,7 +133,6 @@ static int dill_udp_sendl_(struct dill_msock_vfs *mvfs,
       const struct dill_ipaddr *addr,
       struct dill_iolist *first, struct dill_iolist *last) {
     struct dill_udp_sock *obj = dill_cont(mvfs, struct dill_udp_sock, mvfs);
-    if(dill_slow(obj->busy)) {errno = EBUSY; return -1;}
     /* If no destination IP address is provided, fall back to the stored one. */
     const struct dill_ipaddr *dstaddr = addr;
     if(!dstaddr) {
