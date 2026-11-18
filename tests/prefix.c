@@ -102,6 +102,18 @@ int main(void) {
     sz = mrecv(s1, buf, sizeof(buf), -1);
     errno_assert(sz >= 0);
     assert(sz == 5 && memcmp(buf, "Third", 5) == 0);
+    /* A message may end before the last buffer of the iolist. */
+    rc = msend(s0, "Fourth", 6, -1);
+    errno_assert(rc == 0);
+    char part[3][4];
+    struct iolist iol[3] = {
+        {part[0], 4, &iol[1], 0},
+        {part[1], 4, &iol[2], 0},
+        {part[2], 4, NULL, 0}};
+    sz = mrecvl(s1, &iol[0], &iol[2], -1);
+    errno_assert(sz == 6);
+    assert(memcmp(part[0], "Four", 4) == 0 && memcmp(part[1], "th", 2) == 0);
+    assert(iol[1].iol_len == 4 && iol[1].iol_next == &iol[2]);
     rc = msend(s1, "Red", 3, -1);
     errno_assert(rc == 0);
     rc = msend(s1, "Blue", 4, -1);
