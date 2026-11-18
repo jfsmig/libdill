@@ -22,6 +22,7 @@
 
 */
 
+#include <errno.h>
 #include <stdio.h>
 
 /* I hate mocking, but yeah, let's mock DNS and TCP to test this. */
@@ -31,6 +32,44 @@
 #define dill_happyeyeballs_connect mock_happyeyeballs_connect
 
 #include "assert.h"
+
+/* The creation of channels, bundles and coroutines is wrapped as well, so that
+   it can be made to fail. */
+
+#define DILL_DISABLE_RAW_NAMES
+#include "../libdill.h"
+
+/* The number of creations left until one fails with ENOMEM. Zero means that
+   none fails. */
+static int creations_until_enomem = 0;
+
+static int creation_fails(void) {
+    if(!creations_until_enomem || --creations_until_enomem) return 0;
+    errno = ENOMEM;
+    return 1;
+}
+
+static int mock_chmake_mem(struct dill_chstorage *mem, int chv[2]) {
+    if(creation_fails()) return -1;
+    return dill_chmake_mem(mem, chv);
+}
+
+static int mock_bundle_mem(struct dill_bundle_storage *mem) {
+    if(creation_fails()) return -1;
+    return dill_bundle_mem(mem);
+}
+
+/* Every go() and bundle_go() expands to a call to dill_prologue(). */
+static int mock_prologue(sigjmp_buf **ctx, void **ptr, size_t len, int bndl,
+      const char *file, int line) {
+    if(creation_fails()) return -1;
+    return dill_prologue(ctx, ptr, len, bndl, file, line);
+}
+
+#define dill_chmake_mem mock_chmake_mem
+#define dill_bundle_mem mock_bundle_mem
+#define dill_prologue mock_prologue
+
 #include "../happyeyeballs.c"
 
 #define OP_REMOTES 1
@@ -160,6 +199,33 @@ int main(void) {
     rc = dill_happyeyeballs_connect("www.example.org", 80, -1);
     assert(rc == 5);
     end_test();
+
+    /* Running out of memory is an error, whichever object cannot be created.
+       These are, in order: the channel for the connection, the coordinator,
+       the channels for the IPv6 and the IPv4 addresses, the bundle, the IPv6
+       and the IPv4 DNS queries, and the first connection attempt. */
+    struct step enomem_before_dns[] = {
+        {OP_END}
+    };
+    struct step enomem_ipv4_query[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 1000, 1, 0, 0},
+        {OP_END}
+    };
+    struct step enomem_attempt[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 10,   0, 0, 1},
+        {OP_REMOTES, DILL_IPADDR_IPV4, NULL, 1000, 1, 0, 0},
+        {OP_END}
+    };
+    int creation;
+    for(creation = 1; creation <= 8; creation++) {
+        start_test(creation < 7 ? enomem_before_dns :
+            creation == 7 ? enomem_ipv4_query : enomem_attempt, "ENOMEM");
+        creations_until_enomem = creation;
+        rc = dill_happyeyeballs_connect("www.example.org", 80, -1);
+        assert(rc == -1 && errno == ENOMEM);
+        assert(creations_until_enomem == 0);
+        end_test();
+    }
 
     /* Check whether IPv4 DNS query is properly canceled. */
     struct step test3[] = {
