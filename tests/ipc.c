@@ -256,6 +256,40 @@ int main() {
     rc = hclose(s[1]);
     errno_assert(rc == 0);
 
+    /* Whether ipc_close() succeeds or fails, the handle is gone afterwards.
+       Closing s[1] once its peer is gone fails on macOS, with ECONNRESET. */
+    struct ipc_pair_storage pmem;
+    rc = ipc_pair_mem(&pmem, s);
+    errno_assert(rc == 0);
+    rc = ipc_close(s[0], 0);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+    rc = hclose(s[0]);
+    errno_assert(rc == -1 && errno == EBADF);
+    rc = ipc_close(s[1], -1);
+    errno_assert(rc == 0 || errno == ECONNRESET);
+    rc = hclose(s[1]);
+    errno_assert(rc == -1 && errno == EBADF);
+
+    /* Closed connections give their handles back, so a long series of them
+       ends up reusing handle numbers instead of taking new ones. */
+    int highest = -1;
+    int i;
+    for(i = 0; i != 2000; ++i) {
+        rc = ipc_pair(s);
+        errno_assert(rc == 0);
+        if(i < 1000) {
+            if(s[0] > highest) highest = s[0];
+            if(s[1] > highest) highest = s[1];
+        }
+        assert(s[0] <= highest && s[1] <= highest);
+        rc = ipc_done(s[1], -1);
+        errno_assert(rc == 0);
+        rc = ipc_close(s[0], -1);
+        errno_assert(rc == 0);
+        rc = ipc_close(s[1], -1);
+        errno_assert(rc == 0);
+    }
+
     return 0;
 }
 

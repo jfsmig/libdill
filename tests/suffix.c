@@ -105,6 +105,9 @@ int main() {
     errno_assert(rc == 0);
     int ts1 = suffix_detach(s1, -1);
     errno_assert(ts1 >= 0);
+    /* The detached socket is gone, only the underlying one remains. */
+    rc = hclose(s1);
+    errno_assert(rc == -1 && errno == EBADF);
     sz = mrecv(s0, buf, sizeof(buf), -1);
     errno_assert(sz == 3 && memcmp(buf, "Red", 3) == 0);
     sz = mrecv(s0, buf, sizeof(buf), -1);
