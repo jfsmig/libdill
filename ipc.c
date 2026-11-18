@@ -232,15 +232,20 @@ int dill_ipc_sendfd(int s, int fd, int64_t deadline) {
     cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
     *((int*)CMSG_DATA(cmsg)) = fd;
     msg.msg_controllen = cmsg->cmsg_len;
-    int rc = dill_fdout(self->fd, deadline);
-    if(dill_slow(rc < 0)) return -1;
-    ssize_t sz = sendmsg(self->fd, &msg, 0);
-    if(dill_slow(sz == 0)) {self->outdone = 1; errno = EPIPE; return -1;}
-    if(dill_slow(sz < 0)) {
-       if(errno == ECONNRESET) {self->outerr = 1; return -1;}
-       dill_assert(0);
+    /* The descriptor travels with a single byte, so the message is sent
+       either as a whole or not at all. Only the loss of the peer makes
+       the connection unusable for further sending. */
+    while(1) {
+        int rc = dill_fdout(self->fd, deadline);
+        if(dill_slow(rc < 0)) return -1;
+        ssize_t sz = sendmsg(self->fd, &msg, FD_NOSIGNAL);
+        if(dill_fast(sz > 0)) return 0;
+        if(dill_slow(sz == 0)) {self->outdone = 1; errno = EPIPE; return -1;}
+        if(errno == EWOULDBLOCK || errno == EAGAIN) continue;
+        if(errno == EPIPE || errno == ECONNRESET) {
+            self->outerr = 1; errno = ECONNRESET; return -1;}
+        return -1;
     }
-    return 0;
 }
 
 int dill_ipc_recvfd(int s, int64_t deadline) {
