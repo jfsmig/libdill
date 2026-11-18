@@ -358,6 +358,7 @@ static int s5_client_connectbyname(int s, const char *hostname, int port, int64_
     if(dill_slow(!dill_hquery(s, dill_bsock_type))) return -1;
     // validate input
     if(dill_slow(!hostname)) {errno = EINVAL; return -1;}
+    if(dill_slow(!hostname[0])) {errno = EINVAL; return -1;}
     if(dill_slow(strlen(hostname) > 255)) {errno = EINVAL; return -1;}
     if((port <= 0) || (port>65535)) {errno = EINVAL; return -1;}
     // largest possible connect request = 255 chars for name + 7 bytes for
