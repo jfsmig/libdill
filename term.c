@@ -138,7 +138,7 @@ int dill_term_detach(int s, int64_t deadline) {
             struct dill_iolist iol = {NULL, SIZE_MAX, NULL, 0};
             ssize_t sz = dill_term_mrecvl(&self->mvfs, &iol, &iol, deadline);
             if(sz < 0) {
-                if(errno == EPIPE) break;
+                if(self->indone) break;
                 err = errno;
                 goto error;
             }
