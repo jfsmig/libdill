@@ -164,6 +164,7 @@ static int dill_term_msendl(struct dill_msock_vfs *mvfs,
 static ssize_t dill_term_mrecvl(struct dill_msock_vfs *mvfs,
       struct dill_iolist *first, struct dill_iolist *last, int64_t deadline) {
     struct dill_term_sock *self = dill_cont(mvfs, struct dill_term_sock, mvfs);
+    if(dill_slow(self->indone)) {errno = EPIPE; return -1;}
     if(self->len == 0) {
         ssize_t sz = dill_mrecvl(self->u, first, last, deadline);
         if(dill_slow(sz < 0)) return -1;
