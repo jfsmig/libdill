@@ -38,6 +38,13 @@ int main(void) {
     int s2 = udp_open_mem(&addr2, &addr1, &mem);
     errno_assert(s2 >= 0);
 
+    /* An address that does not belong to this host cannot be bound. */
+    struct ipaddr foreign;
+    rc = ipaddr_local(&foreign, "192.0.2.1", 0, 0);
+    errno_assert(rc == 0);
+    int s3 = udp_open(&foreign, NULL);
+    errno_assert(s3 == -1 && errno == EADDRNOTAVAIL);
+
     struct ipaddr dst;
     rc = ipaddr_remote(&dst, "127.0.0.1", 5556, 0, -1);
     errno_assert(rc == 0);
