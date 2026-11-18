@@ -22,6 +22,7 @@
 
 */
 
+#include <stdint.h>
 #include <string.h>
 
 #include "assert.h"
@@ -74,6 +75,52 @@ coroutine void http_client(int s) {
     errno_assert(rc == 0);
 }
 
+/* Reads what is left in the socket and checks that the peer then closed
+   the connection, rather than keeping it open. */
+static void expect_closed_by_peer(int s) {
+    int rc;
+    do {
+        char c;
+        rc = brecv(s, &c, 1, now() + 100);
+    } while(rc == 0);
+    errno_assert(errno == EPIPE);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+}
+
+/* ws_detach() closes the socket when it fails. */
+static void test_detach_closes_socket_on_error(void) {
+    int p[2];
+    int rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    int s = ws_attach_server(p[0], WS_NOHTTP | WS_BINARY, NULL, 0, NULL, 0,
+        -1);
+    errno_assert(s >= 0);
+    /* An unmasked frame, which a server must reject. */
+    const uint8_t frame[] = {0x82, 0x00};
+    rc = bsend(p[1], frame, sizeof(frame), -1);
+    errno_assert(rc == 0);
+    s = ws_detach(s, 1000, NULL, 0, -1);
+    assert(s == -1 && errno == EPROTO);
+    expect_closed_by_peer(p[1]);
+}
+
+/* ws_detach() fails if the peer ends the connection without sending
+   a close frame. */
+static void test_detach_needs_close_frame(void) {
+    int p[2];
+    int rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    int s = ws_attach_server(p[0], WS_NOHTTP | WS_BINARY, NULL, 0, NULL, 0,
+        -1);
+    errno_assert(s >= 0);
+    rc = ipc_done(p[1], -1);
+    errno_assert(rc == 0);
+    s = ws_detach(s, 1000, NULL, 0, -1);
+    assert(s == -1 && errno == ECONNRESET);
+    expect_closed_by_peer(p[1]);
+}
+
 int main(void) {
     int p[2];
     int rc = ipc_pair(p);
@@ -119,6 +166,9 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(cr);
     errno_assert(rc == 0);
+
+    test_detach_closes_socket_on_error();
+    test_detach_needs_close_frame();
     
     return 0;
 }
