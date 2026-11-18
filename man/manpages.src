@@ -1319,9 +1319,17 @@ fxs = [
 
             This function executes the above protocol and returns the newly
             created TCP connection.
+
+            The function fails once both DNS queries are finished and no
+            connection attempt is left that could succeed. The error is then
+            the one of the most recent failure, as reported by
+            **ipaddr_remotes** or **tcp_connect**.
         `,
 
         errors: ["EINVAL", "EMFILE", "ENFILE", "ENOMEM", "ECANCELED"],
+        custom_errors: {
+            EADDRNOTAVAIL: "The name of the remote host cannot be resolved to any address.",
+        },
 
         example: `
             int s = happyeyeballs_connect("www.example.org", 80, -1);
