@@ -22,7 +22,7 @@
 
 */
 
-#include <assert.h>
+#include "assert.h"
 #include "../libdill.h"
 #include <stdio.h>
 #include <string.h>
@@ -98,6 +98,76 @@ void server(int s) {
     err = bsend(s, buf, 5, now() + 5000);
     assert(!err);
     return;
+}
+
+static int reject_credentials(const char *user, const char* pass) {
+    return 0;
+}
+
+// Feeds the proxy a negotiation it has to refuse. The refusal must reach
+// the client and the proxy's caller must be told why the call failed.
+static void proxy_refuses_client(const uint8_t *request, size_t request_len,
+      dill_socks5_auth_function *auth_fn, const uint8_t *refusal,
+      size_t refusal_len) {
+    int h[2];
+    int rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    rc = bsend(h[1], request, request_len, -1);
+    errno_assert(rc == 0);
+    errno = 0;
+    rc = socks5_proxy_auth(h[0], auth_fn, now() + 1000);
+    errno_assert(rc == -1 && errno == EACCES);
+    uint8_t reply[4];
+    assert(refusal_len <= sizeof(reply));
+    rc = brecv(h[1], reply, refusal_len, now() + 1000);
+    errno_assert(rc == 0);
+    assert(memcmp(reply, refusal, refusal_len) == 0);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+    rc = hclose(h[0]);
+    errno_assert(rc == 0);
+}
+
+static void proxy_refuses_wrong_password(void) {
+    // offer NO AUTH and USER/PASS, then log in as "u" with password "p"
+    uint8_t request[] = {0x05, 0x02, 0x00, 0x02, 0x01, 0x01, 'u', 0x01, 'p'};
+    // USER/PASS selected, then authentication failure
+    uint8_t refusal[] = {0x05, 0x02, 0x01, 0xFF};
+    proxy_refuses_client(request, sizeof(request), reject_credentials,
+        refusal, sizeof(refusal));
+}
+
+static void proxy_refuses_unsupported_methods(void) {
+    // offer GSSAPI only
+    uint8_t request[] = {0x05, 0x01, 0x01};
+    // no acceptable methods
+    uint8_t refusal[] = {0x05, 0xFF};
+    proxy_refuses_client(request, sizeof(request), NULL,
+        refusal, sizeof(refusal));
+}
+
+// SOCKS5 can carry IPv4 and IPv6 addresses only. An address of any other
+// family is an invalid argument, on the client as well as on the proxy.
+static void unsupported_address_family_is_rejected(void) {
+    struct ipaddr addr;
+    memset(&addr, 0, sizeof(addr));
+    int h[2];
+    int rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    errno = 0;
+    rc = socks5_proxy_sendreply(h[0], SOCKS5_SUCCESS, &addr, now() + 1000);
+    errno_assert(rc == -1 && errno == EINVAL);
+    // let the client pass the method negotiation
+    uint8_t selection[] = {0x05, 0x00};
+    rc = bsend(h[0], selection, sizeof(selection), -1);
+    errno_assert(rc == 0);
+    errno = 0;
+    rc = socks5_client_connect(h[1], NULL, NULL, &addr, now() + 1000);
+    errno_assert(rc == -1 && errno == EINVAL);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+    rc = hclose(h[0]);
+    errno_assert(rc == 0);
 }
 
 coroutine void proxy_byaddr(int s, char *user, char* pass) {
@@ -191,6 +261,10 @@ int main(void) {
     up_t up[] = {{NULL, NULL}, {"user", "pass"}};
     test_fn *ctest[] = {clientbyaddr, clientbyipstring};
     test_fn *ptest[] = {proxy_byaddr, proxy_byname};
+
+    proxy_refuses_wrong_password();
+    proxy_refuses_unsupported_methods();
+    unsupported_address_family_is_rejected();
 
     for (int pi = 0; pi < 2; pi++) {
         for (int ci = 0; ci < 2; ci++) {
