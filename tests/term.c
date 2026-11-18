@@ -73,6 +73,33 @@ int main(void) {
     rc = hclose(cr);
     errno_assert(rc == 0);
 
+    /* What follows the terminator belongs to the underlying protocol. */
+    rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    p[0] = suffix_attach(p[0], "\r\n", 2);
+    errno_assert(p[0] >= 0);
+    s = suffix_attach(p[1], "\r\n", 2);
+    errno_assert(s >= 0);
+    s = term_attach(s, "STOP", 4);
+    errno_assert(s >= 0);
+    rc = msend(p[0], "STOP", 4, -1);
+    errno_assert(rc == 0);
+    rc = msend(p[0], "GHI", 3, -1);
+    errno_assert(rc == 0);
+    sz = mrecv(s, buf, sizeof(buf), -1);
+    errno_assert(sz == -1 && errno == EPIPE);
+    sz = mrecv(s, buf, sizeof(buf), -1);
+    errno_assert(sz == -1 && errno == EPIPE);
+    s = term_detach(s, -1);
+    errno_assert(s >= 0);
+    sz = mrecv(s, buf, sizeof(buf), -1);
+    errno_assert(sz == 3);
+    assert(memcmp(buf, "GHI", 3) == 0);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+    rc = hclose(p[0]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
