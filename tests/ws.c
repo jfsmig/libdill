@@ -74,6 +74,26 @@ coroutine void http_client(int s) {
     errno_assert(rc == 0);
 }
 
+/* A handshake refused by the server closes the underlying socket. */
+static void test_client_closes_socket_on_refusal(void) {
+    int p[2];
+    int rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    const char *reply = "HTTP/1.1 404 Not Found\r\n";
+    rc = bsend(p[1], reply, strlen(reply), -1);
+    errno_assert(rc == 0);
+    int s = ws_attach_client(p[0], WS_BINARY, "/", "www.example.org", -1);
+    assert(s == -1 && errno == EPROTO);
+    /* The server reads the request, then the end of the stream. */
+    do {
+        char c;
+        rc = brecv(p[1], &c, 1, now() + 100);
+    } while(rc == 0);
+    errno_assert(errno == EPIPE);
+    rc = hclose(p[1]);
+    errno_assert(rc == 0);
+}
+
 int main(void) {
     int p[2];
     int rc = ipc_pair(p);
@@ -119,6 +139,8 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(cr);
     errno_assert(rc == 0);
+
+    test_client_closes_socket_on_refusal();
     
     return 0;
 }
