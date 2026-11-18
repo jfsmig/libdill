@@ -22,7 +22,7 @@
 
 */
 
-#include <assert.h>
+#include "assert.h"
 #include "../libdill.h"
 #include <stdio.h>
 #include <string.h>
@@ -181,6 +181,27 @@ coroutine void proxy_byname(int s, char *user, char* pass) {
     return;
 }
 
+// The proxy answers the method negotiation with a method that the client,
+// having no credentials, did not offer. The client must report a protocol
+// error instead of trusting the proxy.
+static void client_rejects_unoffered_method(uint8_t method) {
+    int h[2];
+    int rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    uint8_t selection[2] = {0x05, method};
+    rc = bsend(h[0], selection, sizeof(selection), -1);
+    errno_assert(rc == 0);
+    struct ipaddr addr;
+    rc = ipaddr_local(&addr, "127.0.0.1", 5555, 0);
+    errno_assert(rc == 0);
+    rc = socks5_client_connect(h[1], NULL, NULL, &addr, now() + 1000);
+    errno_assert(rc == -1 && errno == EPROTO);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+    rc = hclose(h[0]);
+    errno_assert(rc == 0);
+}
+
 typedef char *up_t[2];
 typedef void test_fn(int s, char *user, char* pass);
 
@@ -207,6 +228,10 @@ int main(void) {
             }
         }
     }
+
+    // username/password, then GSSAPI, which libdill never offers
+    client_rejects_unoffered_method(0x02);
+    client_rejects_unoffered_method(0x01);
 
     return 0;
 }
