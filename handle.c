@@ -88,7 +88,8 @@ int dill_hmake(struct dill_hvfs *vfs) {
         for(i = ctx->nhandles; i != sz - 1; ++i)
             hndls[i].next = i + 1;
         hndls[sz - 1].next = -1;
-        ctx->first = ctx->nhandles;
+        if(ctx->first == -1) ctx->first = ctx->nhandles;
+        else hndls[ctx->last].next = ctx->nhandles;
         ctx->last = sz - 1; 
         /* Adjust the array. */
         ctx->handles = hndls;
