@@ -43,6 +43,9 @@ struct dill_tls_sock {
     SSL_CTX *ctx;
     SSL *ssl;
     int u;
+    /* Deadline of the operation in progress. The BIO puts it back after
+       each blocking call, because a coroutine working in the opposite
+       direction may have replaced it with its own in the meantime. */
     int64_t deadline;
     unsigned int indone : 1;
     unsigned int outdone: 1;
@@ -435,14 +438,18 @@ static int dill_tls_cbio_destroy(BIO *bio) {
 
 static int dill_tls_cbio_write(BIO *bio, const char *buf, int len) {
     struct dill_tls_sock *self = (struct dill_tls_sock*)BIO_get_data(bio);
-    int rc = dill_bsend(self->u, buf, len, self->deadline);
+    int64_t deadline = self->deadline;
+    int rc = dill_bsend(self->u, buf, len, deadline);
+    self->deadline = deadline;
     if(dill_slow(rc < 0)) return -1;
     return len;
 }
 
 static int dill_tls_cbio_read(BIO *bio, char *buf, int len) {
     struct dill_tls_sock *self = (struct dill_tls_sock*)BIO_get_data(bio);
-    int rc = dill_brecv(self->u, buf, len, self->deadline);
+    int64_t deadline = self->deadline;
+    int rc = dill_brecv(self->u, buf, len, deadline);
+    self->deadline = deadline;
     if(dill_slow(rc < 0)) return -1;
     return len;
 }
