@@ -174,7 +174,11 @@ static ssize_t dill_term_mrecvl(struct dill_msock_vfs *mvfs,
         }
         return sz;
     }
+    /* Without an iolist the message is received and dropped. The list
+       handed down then ends with the trimmed copy of the dropped item. */
+    struct dill_iolist drop = {NULL, SIZE_MAX, NULL, 0};
     struct dill_iolist trimmed = {0};
+    if(!first) {first = &drop; last = &trimmed;}
     int rc = dill_ioltrim(first, self->len, &trimmed);
     uint8_t buf[self->len];
     struct dill_iolist iol = {buf, self->len, rc < 0 ? NULL : &trimmed, 0}; 
@@ -186,7 +190,9 @@ static ssize_t dill_term_mrecvl(struct dill_msock_vfs *mvfs,
         errno = EPIPE;
         return -1;
     }
-    dill_iolto(buf, self->len, first);
+    /* Hand the head of the message over to the caller. */
+    rc = dill_iolto(buf, sz < self->len ? sz : self->len, first);
+    if(dill_slow(rc < 0)) {errno = EMSGSIZE; return -1;}
     return sz;
 }
 
