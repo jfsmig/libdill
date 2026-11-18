@@ -348,8 +348,8 @@ int dill_ipaddr_remotes(struct dill_ipaddr *addrs, int naddrs,
     struct dns_addrinfo *ai = dns_ai_open(name, portstr,
         mode == DILL_IPADDR_IPV4 ? DNS_T_A : DNS_T_AAAA, &hints,
         resolver, &rc);
-    dill_assert(ai);
     dns_res_close(resolver);
+    if(dill_slow(!ai)) {errno = rc; return -1;}
     /* Wait for the results. */
     int nresults = 0;
     struct addrinfo *it = NULL;
