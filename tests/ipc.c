@@ -217,6 +217,34 @@ int main() {
     rc = hclose(s[1]);
     errno_assert(rc == 0);
 
+    /* A descriptor that is not open cannot be sent. That is the caller's
+       error; the connection stays usable. */
+    rc = ipc_pair(s);
+    errno_assert(rc == 0);
+    int closed[2];
+    rc = pipe(closed);
+    errno_assert(rc == 0);
+    rc = close(closed[0]);
+    errno_assert(rc == 0);
+    rc = close(closed[1]);
+    errno_assert(rc == 0);
+    rc = ipc_sendfd(s[0], closed[0], -1);
+    errno_assert(rc == -1 && errno == EBADF);
+    rc = ipc_sendfd(s[0], STDERR_FILENO, -1);
+    errno_assert(rc == 0);
+    int passed = ipc_recvfd(s[1], -1);
+    errno_assert(passed >= 0);
+    rc = close(passed);
+    errno_assert(rc == 0);
+
+    /* Send a descriptor to a peer that has closed the connection. */
+    rc = hclose(s[1]);
+    errno_assert(rc == 0);
+    rc = ipc_sendfd(s[0], STDERR_FILENO, -1);
+    errno_assert(rc == -1 && errno == ECONNRESET);
+    rc = hclose(s[0]);
+    errno_assert(rc == 0);
+
     /* Transport a file descriptor via SCM_RIGHTS. */
     rc = ipc_pair(s);
     errno_assert(rc == 0);
