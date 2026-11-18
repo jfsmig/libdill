@@ -152,6 +152,45 @@ int main() {
     rc = close(pp[1]);
     assert(rc == 0);
 
+    /* Waiting for an fd must not also wait for what another fd was waited
+       for earlier. fds[1] is writable all along; having waited for it for
+       out, waiting for it for in must still time out. The fdin() calls that
+       time out on fds[0] keep a second fd in the pollset, so that the
+       pollset has entries to move around. */
+    rc = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+    errno_assert(rc == 0);
+    rc = fdin(fds[0], 0);
+    assert(rc == -1 && errno == ETIMEDOUT);
+    rc = fdout(fds[1], -1);
+    errno_assert(rc == 0);
+    rc = fdin(fds[0], 0);
+    assert(rc == -1 && errno == ETIMEDOUT);
+    rc = fdin(fds[1], now() + 50);
+    assert(rc == -1 && errno == ETIMEDOUT);
+    rc = fdclean(fds[0]);
+    errno_assert(rc == 0);
+    rc = fdclean(fds[1]);
+    errno_assert(rc == 0);
+    rc = close(fds[0]);
+    errno_assert(rc == 0);
+    rc = close(fds[1]);
+    errno_assert(rc == 0);
+
+    /* The peer hanging up on an fd that nobody waits for any more, because
+       the wait timed out, must not wake anybody up. */
+    rc = pipe(pp);
+    errno_assert(rc == 0);
+    rc = fdin(pp[0], now() + 10);
+    assert(rc == -1 && errno == ETIMEDOUT);
+    rc = close(pp[1]);
+    errno_assert(rc == 0);
+    rc = msleep(now() + 50);
+    errno_assert(rc == 0);
+    rc = fdclean(pp[0]);
+    errno_assert(rc == 0);
+    rc = close(pp[0]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
