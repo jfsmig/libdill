@@ -44,6 +44,76 @@ coroutine void client1(int u) {
     errno_assert(rc == 0);
 }
 
+static uint8_t busy_out[0x100000];
+static uint8_t busy_in[sizeof(busy_out)];
+
+coroutine void busy_sender(int s) {
+    int rc = bsend(s, busy_out, sizeof(busy_out), -1);
+    errno_assert(rc == 0);
+}
+
+coroutine void busy_receiver(int s) {
+    char buf[3];
+    int rc = brecv(s, buf, sizeof(buf), -1);
+    errno_assert(rc == 0);
+    assert(buf[0] == 'A' && buf[1] == 'B' && buf[2] == 'C');
+}
+
+coroutine void busy_peer(int u) {
+    int s = tls_attach_server(u, "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    int rc = msleep(now() + 50);
+    errno_assert(rc == 0);
+    rc = brecv(s, busy_in, sizeof(busy_in), -1);
+    errno_assert(rc == 0);
+    assert(memcmp(busy_in, busy_out, sizeof(busy_in)) == 0);
+    rc = bsend(s, "ABCDEF", 6, -1);
+    errno_assert(rc == 0);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+}
+
+/* A coroutine that sends, or receives, on a socket where another one is
+   blocked doing the same gets EBUSY and does no harm to the operation in
+   progress. The send blocks because it exceeds what the transport buffers. */
+static void test_busy(void) {
+    size_t i;
+    for(i = 0; i != sizeof(busy_out); ++i) busy_out[i] = (uint8_t)(i % 251);
+    int u[2];
+    int rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    int peer = go(busy_peer(u[1]));
+    errno_assert(peer >= 0);
+    int s = tls_attach_client(u[0], -1);
+    errno_assert(s >= 0);
+    int sender = go(busy_sender(s));
+    errno_assert(sender >= 0);
+    int receiver = go(busy_receiver(s));
+    errno_assert(receiver >= 0);
+    char buf[3];
+    rc = bsend(s, "X", 1, -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    rc = brecv(s, buf, sizeof(buf), -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    rc = bundle_wait(sender, -1);
+    errno_assert(rc == 0);
+    rc = bundle_wait(receiver, -1);
+    errno_assert(rc == 0);
+    rc = brecv(s, buf, sizeof(buf), -1);
+    errno_assert(rc == 0);
+    assert(buf[0] == 'D' && buf[1] == 'E' && buf[2] == 'F');
+    rc = bundle_wait(peer, -1);
+    errno_assert(rc == 0);
+    rc = hclose(sender);
+    errno_assert(rc == 0);
+    rc = hclose(receiver);
+    errno_assert(rc == 0);
+    rc = hclose(peer);
+    errno_assert(rc == 0);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+}
+
 coroutine void client2(int u) {
     int s = tls_attach_client(u, -1);
     errno_assert(s >= 0);
@@ -80,6 +150,8 @@ coroutine void client3(int u) {
 
 int main(void) {
     char buf[16];
+
+    test_busy();
 
     /* Test simple data exchange, with explicit handshake. */
     int u[2];
