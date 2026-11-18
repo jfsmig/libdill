@@ -122,6 +122,43 @@ int main() {
     rc = hclose(ls);
     errno_assert(rc == 0);
 
+    /* A message is spread over all the buffers of an iolist. */
+    rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    s0 = suffix_attach(h[0], "\r\n", 2);
+    errno_assert(s0 >= 0);
+    s1 = suffix_attach(h[1], "\r\n", 2);
+    errno_assert(s1 >= 0);
+    rc = msend(s0, "ABCDE", 5, -1);
+    errno_assert(rc == 0);
+    char head[2];
+    char tail[4];
+    struct iolist iol_tail = {tail, sizeof(tail), NULL, 0};
+    struct iolist iol_head = {head, sizeof(head), &iol_tail, 0};
+    sz = mrecvl(s1, &iol_head, &iol_tail, -1);
+    errno_assert(sz == 5);
+    assert(memcmp(head, "AB", 2) == 0 && memcmp(tail, "CDE", 3) == 0);
+
+    /* A buffer-less iolist item skips as many bytes as its length. */
+    rc = msend(s0, "FGHIJ", 5, -1);
+    errno_assert(rc == 0);
+    struct iolist iol_skip = {NULL, 2, &iol_tail, 0};
+    sz = mrecvl(s1, &iol_skip, &iol_tail, -1);
+    errno_assert(sz == 5);
+    assert(memcmp(tail, "HIJ", 3) == 0);
+
+    /* A message longer than the buffer is rejected. */
+    rc = msend(s0, "KLMNO", 5, -1);
+    errno_assert(rc == 0);
+    sz = mrecv(s1, buf, 4, -1);
+    errno_assert(sz == -1 && errno == EMSGSIZE);
+    sz = mrecv(s1, buf, sizeof(buf), -1);
+    errno_assert(sz == -1 && errno == ECONNRESET);
+    rc = hclose(s1);
+    errno_assert(rc == 0);
+    rc = hclose(s0);
+    errno_assert(rc == 0);
+
     return 0;
 }
 

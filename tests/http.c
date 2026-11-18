@@ -123,6 +123,28 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(h[0]);
     errno_assert(rc == 0);
+
+    /* A request line that does not fit into the receive buffer is rejected.
+       The storage is zeroed to make the outcome reproducible: all that fits
+       into the buffer is a valid request line padded with spaces. */
+    rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    struct http_storage mem;
+    memset(&mem, 0, sizeof(mem));
+    s1 = http_attach_mem(h[1], &mem);
+    errno_assert(s1 >= 0);
+    char line[1100];
+    memset(line, ' ', sizeof(line));
+    memcpy(line, "GET / HTTP/1.1", 14);
+    memcpy(line + sizeof(line) - 2, "\r\n", 2);
+    rc = bsend(h[0], line, sizeof(line), -1);
+    errno_assert(rc == 0);
+    rc = http_recvrequest(s1, cmd, sizeof(cmd), url, sizeof(url), -1);
+    errno_assert(rc == -1 && errno == EMSGSIZE);
+    rc = hclose(s1);
+    errno_assert(rc == 0);
+    rc = hclose(h[0]);
+    errno_assert(rc == 0);
     return 0;
 }
 
