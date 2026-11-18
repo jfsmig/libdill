@@ -66,8 +66,18 @@ static dill_coroutine void dill_happyeyeballs_attempt(struct dill_ipaddr addr,
     dill_assert(rc == 0);
 }
 
+/* Tells dill_happyeyeballs_connect that there will be no connection. The error
+   travels as a negative number through the channel meant for the connection. */
+static void dill_happyeyeballs_fail(int ch, int err) {
+    dill_assert(err > 0);
+    int res = -err;
+    int rc = dill_chsend(ch, &res, sizeof(int), -1);
+    dill_assert(rc == 0 || errno == ECANCELED);
+}
+
 static dill_coroutine void dill_happyeyeballs_coordinator(
       const char *name, int port, int ch) {
+    int err;
     struct dill_ipaddr nulladdr;
     int rc = dill_ipaddr_local(&nulladdr, "0.0.0.0", 0, DILL_IPADDR_IPV4);
     dill_assert(rc == 0);
@@ -77,22 +87,20 @@ static dill_coroutine void dill_happyeyeballs_coordinator(
     int chipv6[2];
     struct dill_chstorage chipv6_storage;
     rc = dill_chmake_mem(&chipv6_storage, chipv6);
-    dill_assert(rc == 0);
+    if(dill_slow(rc < 0)) {err = errno; goto error1;}
     int chipv4[2];
     struct dill_chstorage chipv4_storage;
     rc = dill_chmake_mem(&chipv4_storage, chipv4);
-    dill_assert(rc == 0);
+    if(dill_slow(rc < 0)) {err = errno; goto error2;}
     struct dill_bundle_storage bndl_storage;
     int bndl = dill_bundle_mem(&bndl_storage);
-    dill_assert(bndl >= 0);
+    if(dill_slow(bndl < 0)) {err = errno; goto error3;}
     rc = dill_bundle_go(bndl, dill_happyeyeballs_dnsquery(name, port,
         DILL_IPADDR_IPV6, chipv6[1]));
-    if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
-    dill_assert(rc == 0);
+    if(dill_slow(rc < 0)) {err = errno; goto error4;}
     rc = dill_bundle_go(bndl, dill_happyeyeballs_dnsquery(name, port,
         DILL_IPADDR_IPV4, chipv4[1]));
-    if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
-    dill_assert(rc == 0);
+    if(dill_slow(rc < 0)) {err = errno; goto error4;}
     /* RFC says to wait for 50ms for IPv6 result irrespective of whether
        IPv4 address arrives. */
     struct dill_ipaddr addr;
@@ -122,8 +130,7 @@ use_address:
         if(dill_ipaddr_equal(&addr, &nulladdr, 0)) continue;
         /* Launch the connect attempt. */
         rc = dill_bundle_go(bndl, dill_happyeyeballs_attempt(addr, ch));
-        if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
-        dill_assert(rc == 0);
+        if(dill_slow(rc < 0)) {err = errno; goto error4;}
         /* Alternate between IPv4 and IPv6 addresses. */
         if(idx == 0) {
             int tmp = cls[0].ch;
@@ -136,16 +143,23 @@ use_address:
         dill_assert(rc == 0);
     }
 cancel:
+    err = ECANCELED;
+error4:
     rc = dill_hclose(bndl);
     dill_assert(rc == 0);
+error3:
     rc = dill_hclose(chipv4[0]);
     dill_assert(rc == 0);
     rc = dill_hclose(chipv4[1]);
     dill_assert(rc == 0);
+error2:
     rc = dill_hclose(chipv6[0]);
     dill_assert(rc == 0);
     rc = dill_hclose(chipv6[1]);
     dill_assert(rc == 0);
+error1:
+    /* When canceled, nobody is waiting for the outcome any more. */
+    if(err != ECANCELED) dill_happyeyeballs_fail(ch, err);
 }
 
 int dill_happyeyeballs_connect(const char *name, int port, int64_t deadline) {
@@ -161,6 +175,7 @@ int dill_happyeyeballs_connect(const char *name, int port, int64_t deadline) {
     int conn;
     rc = dill_chrecv(chconns[0], &conn, sizeof(int), deadline);
     if(dill_slow(rc < 0)) {err = errno; goto exit3;}
+    if(dill_slow(conn < 0)) {err = -conn; goto exit3;}
     res = conn;
 exit3:
     rc = dill_hclose(coord);
