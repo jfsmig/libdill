@@ -269,7 +269,7 @@ int dill_http_sendfield(int s, const char *name, const char *value,
     iol[1].iol_rsvd = 0;
     const char *start = dill_lstrip(value, ' ');
     const char *end = dill_rstrip(start, ' ');
-    dill_assert(start < end);
+    if(dill_slow(start >= end)) {errno = EPROTO; return -1;}
     iol[2].iol_base = (void*)start;
     iol[2].iol_len = end - start;
     iol[2].iol_next = NULL;
