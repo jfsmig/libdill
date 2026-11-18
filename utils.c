@@ -166,11 +166,11 @@ int dill_base64_decode(const char *in, size_t in_len, uint8_t *out,
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
     for(io = 0, ii = 0, v = 0, rem = 0; ii < in_len; ii++) {
-        if(isspace(in[ii]))
+        if(isspace((unsigned char)in[ii]))
             continue;
         if(in[ii] == '=')
             break;
-        ch = DECODEMAP[(int)(in[ii])];
+        ch = DECODEMAP[(unsigned char)in[ii]];
         /*  Discard invalid characters as per RFC 2045. */
         if(ch == 0xFF)
             break; 
