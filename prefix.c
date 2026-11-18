@@ -180,7 +180,7 @@ static ssize_t dill_prefix_mrecvl(struct dill_msock_vfs *mvfs,
     struct dill_iolist *old_next = it->iol_next;
     it->iol_len = rmn;
     it->iol_next = NULL;
-    rc = dill_brecvl(self->u, first, last, deadline);
+    rc = dill_brecvl(self->u, first, it, deadline);
     /* Get iolist to its original state. */
     it->iol_len = old_len;
     it->iol_next = old_next;
