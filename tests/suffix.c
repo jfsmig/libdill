@@ -99,6 +99,11 @@ int main() {
     sz = mrecv(s1, buf, sizeof(buf), -1);
     errno_assert(sz >= 0);
     assert(sz == 5 && memcmp(buf, "Third", 5) == 0);
+    /* A message received without an iolist is dropped. */
+    rc = msend(s0, "Fourth", 6, -1);
+    errno_assert(rc == 0);
+    sz = mrecvl(s1, NULL, NULL, -1);
+    errno_assert(sz == 6);
     rc = msend(s1, "Red", 3, -1);
     errno_assert(rc == 0);
     rc = msend(s1, "Blue", 4, -1);
