@@ -293,6 +293,7 @@ int dill_prologue(sigjmp_buf **jb, void **ptr, size_t len, int bndl,
     cr->ready.next = NULL;
     dill_slist_init(&cr->clauses);
     cr->closer = NULL;
+    cr->closing = 0;
     cr->no_blocking1 = 0;
     cr->no_blocking2 = 0;
     cr->done = 0;
@@ -374,16 +375,33 @@ static void *dill_cr_query(struct dill_hvfs *vfs, const void *type) {
     return NULL;
 }
 
+/* True if the running coroutine is 'cr' itself or is being closed by 'cr',
+   directly or through a chain of nested hclose() calls. In both cases 'cr'
+   cannot finish before the running coroutine does. */
+static int dill_cr_outlives_running(struct dill_cr *cr) {
+    struct dill_ctx_cr *ctx = &dill_getctx->cr;
+    struct dill_cr *it;
+    for(it = ctx->r; it; it = it->closer)
+        if(it == cr) return 1;
+    return 0;
+}
+
 /* Gets called when coroutine handle is closed. */
 static void dill_cr_close(struct dill_hvfs *vfs) {
     struct dill_ctx_cr *ctx = &dill_getctx->cr;
     struct dill_cr *cr = dill_cont(vfs, struct dill_cr, vfs);
     /* If the coroutine has already finished, we are done. */
     if(!cr->done) {
+        /* This assertion triggers when coroutine tries to close a bundle that
+           it is part of, or the coroutine that is closing it. There's no sane
+           way to handle that so let's just crash the process. */
+        dill_assert(!dill_cr_outlives_running(cr));
         /* No blocking calls from this point on. */
         cr->no_blocking1 = 1;
-        /* Resume the coroutine if it was blocked. */
-        if(!cr->ready.next)
+        /* Resume the coroutine if it was blocked. A coroutine waiting for
+           the one it is closing is left alone: that one resumes it, and
+           cancelling it here would schedule it twice. */
+        if(!cr->ready.next && !cr->closing)
             dill_cancel(cr, ECANCELED);
         /* Wait for the coroutine to stop executing. With no clauses added,
            the only mechanism to resume is through dill_cancel(). This is not
@@ -391,11 +409,9 @@ static void dill_cr_close(struct dill_hvfs *vfs) {
            coroutine that is being shut down is not permitted to block, we
            should get control back pretty quickly. */
         cr->closer = ctx->r;
+        ctx->r->closing = 1;
         int rc = dill_wait();
-        /* This assertion triggers when coroutine tries to close a bundle that
-           it is part of. There's no sane way to handle that so let's just
-           crash the process. */
-        dill_assert(!(rc == -1 && errno == ECANCELED));
+        ctx->r->closing = 0;
         dill_assert(rc == -1 && errno == 0);
     }
 #if defined DILL_CENSUS
