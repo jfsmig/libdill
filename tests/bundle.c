@@ -38,6 +38,22 @@ coroutine void worker3(int delay) {
     assert(rc == 0);
 }
 
+coroutine void worker4(int64_t deadline) {
+    int rc = msleep(deadline);
+    errno_assert(rc == 0);
+}
+
+coroutine void worker5(int ch) {
+    int val;
+    int rc = chrecv(ch, &val, sizeof(val), -1);
+    errno_assert(rc == 0);
+}
+
+coroutine void waiter(int bndl) {
+    int rc = bundle_wait(bndl, -1);
+    errno_assert(rc == -1 && errno == ECANCELED);
+}
+
 int main(void) {
     int hndl1 = bundle();
     errno_assert(hndl1 >= 0);
@@ -151,6 +167,37 @@ int main(void) {
     rc = bundle_wait(hndl13, now() + 50);
     errno_assert(rc == -1 && errno == ETIMEDOUT);
     rc = hclose(hndl13);
+    errno_assert(rc == 0);
+
+    /* Test the deadline expiring in the same scheduler pass in which the last
+       coroutine of the bundle finishes. */
+    int64_t deadline = now() + 50;
+    int hndl14 = go(worker4(deadline));
+    errno_assert(hndl14 >= 0);
+    rc = bundle_wait(hndl14, deadline);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+    rc = hclose(hndl14);
+    errno_assert(rc == 0);
+
+    /* Test the waiter being canceled in the same scheduler pass in which
+       the last coroutine of the bundle finishes. */
+    int ch[2];
+    rc = chmake(ch);
+    errno_assert(rc == 0);
+    int hndl15 = go(worker5(ch[0]));
+    errno_assert(hndl15 >= 0);
+    int hndl16 = go(waiter(hndl15));
+    errno_assert(hndl16 >= 0);
+    int val = 0;
+    rc = chsend(ch[1], &val, sizeof(val), -1);
+    errno_assert(rc == 0);
+    rc = hclose(hndl16);
+    errno_assert(rc == 0);
+    rc = hclose(hndl15);
+    errno_assert(rc == 0);
+    rc = hclose(ch[0]);
+    errno_assert(rc == 0);
+    rc = hclose(ch[1]);
     errno_assert(rc == 0);
 
     return 0;
