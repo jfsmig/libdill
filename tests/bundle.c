@@ -44,6 +44,11 @@ int main(void) {
     int rc = hclose(hndl1);
     errno_assert(rc == 0);
 
+    /* Test that missing storage is reported through errno. */
+    errno = 0;
+    rc = bundle_mem(NULL);
+    errno_assert(rc == -1 && errno == EINVAL);
+
     int hndl2 = bundle();
     errno_assert(hndl2 >= 0);
     rc = bundle_go(hndl2, worker1());
