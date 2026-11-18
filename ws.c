@@ -539,13 +539,18 @@ int dill_ws_done(int s, int status, const void *buf, size_t len,
     return 0;
 }
 
+/* Unlike the other errors, EBUSY, when another coroutine is sending or
+   receiving, leaves the socket open: closing it would free it under that
+   coroutine. */
 int dill_ws_detach(int s, int status, const void *buf, size_t len,
       int64_t deadline) {
+    int err;
     struct dill_ws_sock *self = dill_hquery(s, dill_ws_type);
     if(dill_slow(!self)) return -1;
     if(!self->outdone) {
         int rc = dill_ws_done(s, status, buf, len, deadline);
-        if(dill_slow(rc < 0)) return -1;
+        if(dill_slow(rc < 0 && errno == EBUSY)) return -1;
+        if(dill_slow(rc < 0)) {err = errno; goto error;}
     }
     while(1) {
         struct dill_iolist iol = {NULL, SIZE_MAX, NULL, 0};
@@ -553,12 +558,21 @@ int dill_ws_detach(int s, int status, const void *buf, size_t len,
             deadline);
         if(sz < 0) {
              if(errno == EPIPE) break;
-             return -1;
+             if(errno == EBUSY) return -1;
+             err = errno;
+             goto error;
         }
     }
+    /* The connection may also have ended without a close frame. */
+    if(dill_slow(!self->indone)) {err = ECONNRESET; goto error;}
     int u = self->u;
     if(!self->mem) free(self);
     return u;
+error:;
+    int rc = dill_hclose(s);
+    dill_assert(rc == 0);
+    errno = err;
+    return -1;
 }
 
 static void dill_ws_hclose(struct dill_hvfs *hvfs) {
