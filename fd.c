@@ -328,6 +328,7 @@ int dill_fd_recv(int s, struct dill_fd_rxbuf *rxbuf, struct dill_iolist *first,
                 /* Skip specified number of bytes. */
                 dill_assert(it == begin);
                 int rc = dill_fd_skip(s, it->iol_len, deadline);
+                if(dill_slow(rc < 0)) return -1;
                 goto next;
             }
             if(it == end || !it->iol_next->iol_base || !it->iol_next->iol_len) {
