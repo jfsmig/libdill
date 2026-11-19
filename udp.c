@@ -186,6 +186,11 @@ static ssize_t dill_udp_recvl_(struct dill_msock_vfs *mvfs,
                packets coming from different addresses. */
             if(obj->hasremote && !dill_ipaddr_equal(&raddr, &obj->remote, 0))
                 continue;
+            /* The kernel has discarded the part of the packet that did not
+               fit into the buffer. Without a buffer, the caller asked for
+               the packet to be dropped. */
+            if(dill_slow(first && (hdr.msg_flags & MSG_TRUNC))) {
+                errno = EMSGSIZE; return -1;}
             if(addr) *addr = raddr;
             return sz;
         }
