@@ -39,6 +39,11 @@ coroutine void client(int s) {
     errno_assert(sz >= 0);
     assert(sz == 3);
     assert(buf[0] == 'D' && buf[1] == 'E' && buf[2] == 'F');
+    /* Nothing can be sent after the terminator. */
+    rc = term_done(s, -1);
+    errno_assert(rc == 0);
+    rc = msend(s, "GHI", 3, -1);
+    errno_assert(rc == -1 && errno == EPIPE);
     s = term_detach(s, -1);
     errno_assert(s >= 0);
     rc = hclose(s);
