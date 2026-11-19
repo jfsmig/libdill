@@ -22,6 +22,7 @@
 
 */
 
+#include <fcntl.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -65,6 +66,41 @@ coroutine void client3(int s) {
     rc = bsend(s, "DEF", 3, -1);
     errno_assert(rc == 0);
     rc = ipc_close(s, -1);
+    errno_assert(rc == 0);
+}
+
+coroutine void close_flooded(int s, volatile int *closed) {
+    int rc = ipc_close(s, now() + 50);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+    *closed = 1;
+}
+
+/* A peer that never stops sending must not keep ipc_close() going past its
+   deadline. The sender here is as bad as it gets: it never blocks, so there
+   is data to read every time the closing side looks. */
+static void test_close_flooded(void) {
+    int sp[2];
+    int rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sp);
+    errno_assert(rc == 0);
+    rc = fcntl(sp[0], F_SETFL, O_NONBLOCK);
+    errno_assert(rc == 0);
+    int s = ipc_fromfd(sp[1]);
+    errno_assert(s >= 0);
+    volatile int closed = 0;
+    int64_t giveup = now() + 5000;
+    int cr = go(close_flooded(s, &closed));
+    errno_assert(cr >= 0);
+    char buffer[2048];
+    memset(buffer, 0, sizeof(buffer));
+    while(!closed) {
+        assert(now() < giveup);
+        while(send(sp[0], buffer, sizeof(buffer), 0) > 0);
+        rc = yield();
+        errno_assert(rc == 0);
+    }
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+    rc = close(sp[0]);
     errno_assert(rc == 0);
 }
 
@@ -159,6 +195,8 @@ int main() {
     errno_assert(rc == -1 && errno == ECONNRESET);
     rc = hclose(cr);
     errno_assert(rc == 0);
+
+    test_close_flooded();
 
     /* Try some invalid inputs. */
     rc = ipc_pair(s);
