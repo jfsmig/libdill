@@ -186,7 +186,12 @@ static ssize_t dill_term_mrecvl(struct dill_msock_vfs *mvfs,
         errno = EPIPE;
         return -1;
     }
-    dill_iolto(buf, self->len, first);
+    /* Hand the head of the message over to the caller, unless the message
+       is to be dropped. */
+    if(first) {
+        rc = dill_iolto(buf, sz < self->len ? sz : self->len, first);
+        if(dill_slow(rc < 0)) {errno = EMSGSIZE; return -1;}
+    }
     return sz;
 }
 
