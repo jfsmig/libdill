@@ -35,12 +35,6 @@
 #define DILL_FD_CACHESIZE 32
 #define DILL_FD_BUFSIZE 1984
 
-#if defined MSG_NOSIGNAL
-#define FD_NOSIGNAL MSG_NOSIGNAL
-#else
-#define FD_NOSIGNAL 0
-#endif
-
 int dill_ctx_fd_init(struct dill_ctx_fd *ctx) {
     ctx->count = 0;
     dill_slist_init(&ctx->cache);
