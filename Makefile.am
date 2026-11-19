@@ -135,6 +135,7 @@ if DILL_SOCKETS
 check_PROGRAMS += \
     tests/ipaddr \
     tests/ipaddr2 \
+    tests/ipaddr_resolveropen \
     tests/ipaddr_resolver \
     tests/ipaddr_multiple \
     tests/ipaddr_dnsrace \
