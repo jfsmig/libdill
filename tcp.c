@@ -100,12 +100,14 @@ int dill_tcp_fromfd_mem(int fd, struct dill_tcp_storage *mem) {
     if(dill_slow(fd < 0)) {err = errno; goto error1;}
     /* Set the socket to non-blocking mode */
     rc = dill_fd_unblock(fd);
-    if(dill_slow(rc < 0)) {err = errno; goto error1;}
+    if(dill_slow(rc < 0)) {err = errno; goto error2;}
     /* Create the handle */
     int h = dill_tcp_makeconn(fd, mem);
-    if(dill_slow(h < 0)) {err = errno; goto error1;}
+    if(dill_slow(h < 0)) {err = errno; goto error2;}
     /* Return the handle */
     return h;
+error2:
+    dill_fd_close(fd);
 error1:
     errno = err;
     return -1;
@@ -311,12 +313,14 @@ int dill_tcp_listener_fromfd_mem(int fd,
     if(dill_slow(fd < 0)) {err = errno; goto error1;}
     /* Set the socket to non-blocking mode */
     rc = dill_fd_unblock(fd);
-    if(dill_slow(rc < 0)) {err = errno; goto error1;}
+    if(dill_slow(rc < 0)) {err = errno; goto error2;}
     /* Create the handle */
     int h = dill_tcp_makelistener(fd, mem);
-    if(dill_slow(h < 0)) {err = errno; goto error1;}
+    if(dill_slow(h < 0)) {err = errno; goto error2;}
     /* Return the handle */
     return h;
+error2:
+    dill_fd_close(fd);
 error1:
     errno = err;
     return -1;
