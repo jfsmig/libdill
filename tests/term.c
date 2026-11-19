@@ -73,6 +73,19 @@ int main(void) {
     rc = hclose(cr);
     errno_assert(rc == 0);
 
+    /* The terminator must fit into the socket and the storage must exist. */
+    rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    s = suffix_attach(p[0], "\r\n", 2);
+    errno_assert(s >= 0);
+    char terminator[33] = {0};
+    s = term_attach(s, terminator, sizeof(terminator));
+    errno_assert(s == -1 && errno == EINVAL);
+    s = suffix_attach(p[1], "\r\n", 2);
+    errno_assert(s >= 0);
+    s = term_attach_mem(s, terminator, 1, NULL);
+    errno_assert(s == -1 && errno == EINVAL);
+
     return 0;
 }
 
