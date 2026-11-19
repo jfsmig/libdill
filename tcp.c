@@ -211,7 +211,8 @@ int dill_tcp_done(int s, int64_t deadline) {
     if(dill_slow(rc < 0)) {
         if(errno == ENOTCONN) {self->outerr = 1; errno = ECONNRESET; return -1;}
         if(errno == ENOBUFS) {self->outerr = 1; errno = ENOMEM; return -1;}
-        dill_assert(rc == 0);
+        self->outerr = 1;
+        return -1;
     }
     self->outdone = 1;
     return 0;
