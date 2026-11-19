@@ -182,7 +182,11 @@ static ssize_t dill_term_mrecvl(struct dill_msock_vfs *mvfs,
     int rc = dill_ioltrim(first, self->len, &trimmed);
     uint8_t buf[self->len];
     struct dill_iolist iol = {buf, self->len, rc < 0 ? NULL : &trimmed, 0}; 
-    ssize_t sz = dill_mrecvl(self->u, &iol, rc < 0 ? &iol : last, deadline);
+    /* The list handed down ends with the caller's last item only if that
+       item follows the trimmed one. */
+    struct dill_iolist *tail = rc < 0 ? &iol : &trimmed;
+    if(trimmed.iol_next) tail = last;
+    ssize_t sz = dill_mrecvl(self->u, &iol, tail, deadline);
     if(dill_slow(sz < 0)) return -1;
     if(dill_slow(sz == self->len &&
           dill_slow(memcmp(self->buf, buf, self->len) == 0))) {

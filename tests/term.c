@@ -139,6 +139,26 @@ int main(void) {
     rc = hclose(p[0]);
     errno_assert(rc == 0);
 
+    /* Receive a message longer than the terminator from a protocol that
+       hands the iolist down to a bytestream. */
+    rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    p[0] = prefix_attach(p[0], 2, 0);
+    errno_assert(p[0] >= 0);
+    s = prefix_attach(p[1], 2, 0);
+    errno_assert(s >= 0);
+    s = term_attach(s, "STOP", 4);
+    errno_assert(s >= 0);
+    rc = msend(p[0], "ABCDEF", 6, -1);
+    errno_assert(rc == 0);
+    sz = mrecv(s, buf, sizeof(buf), -1);
+    errno_assert(sz == 6);
+    assert(memcmp(buf, "ABCDEF", 6) == 0);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+    rc = hclose(p[0]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
