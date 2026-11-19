@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-gcc, os: ubuntu-latest, cc: gcc }
+          - { name: linux-clang, os: ubuntu-latest, cc: clang, packages: clang }
+          - { name: linux-gcc-static, os: ubuntu-latest, cc: gcc, configure: --disable-shared }
+          - { name: linux-clang-static, os: ubuntu-latest, cc: clang, packages: clang, configure: --disable-shared }
+          - { name: linux-gcc-poll, os: ubuntu-latest, cc: gcc, cflags: -DDILL_POLL }
+          - { name: linux-gcc-nothreads, os: ubuntu-latest, cc: gcc, configure: --disable-threads }
+          - { name: linux-gcc-census, os: ubuntu-latest, cc: gcc, configure: --enable-census }
+          - { name: linux-gcc-valgrind, os: ubuntu-latest, cc: gcc, packages: valgrind, configure: --enable-valgrind }
+          - { name: linux-gcc-static-valgrind, os: ubuntu-latest, cc: gcc, packages: valgrind, configure: --disable-shared --enable-valgrind }
+          - { name: linux-gcc-valgrind-nothreads, os: ubuntu-latest, cc: gcc, packages: valgrind, configure: --enable-valgrind --disable-threads }
+          - { name: linux-gcc-poll-nothreads, os: ubuntu-latest, cc: gcc, configure: --disable-threads, cflags: -DDILL_POLL }
+          - { name: linux-gcc-static-nothreads, os: ubuntu-latest, cc: gcc, configure: --disable-shared --disable-threads }
+          - { name: linux-gcc-arch-fallback, os: ubuntu-latest, cc: gcc, cflags: -DDILL_ARCH_FALLBACK }
+          - { name: linux-clang-arch-fallback, os: ubuntu-latest, cc: clang, packages: clang, cflags: -DDILL_ARCH_FALLBACK }
+          - { name: linux-gcc-thread-fallback, os: ubuntu-latest, cc: gcc, cflags: -DDILL_THREAD_FALLBACK }
+          - { name: linux-gcc-tls, os: ubuntu-latest, cc: gcc, packages: libssl-dev, configure: --enable-tls }
+          - { name: linux-gcc-dist, os: ubuntu-latest, cc: gcc, dist: true }
+          - { name: linux-arm64-gcc, os: ubuntu-26.04-arm, cc: gcc }
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      # package_version.sh derives the version from tags via git describe.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config ${{ matrix.packages }}
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          ./configure ${{ matrix.configure }} CFLAGS="-O3 ${{ matrix.cflags }} -DDILL_SLOW_TESTS"
+
+      - name: Build
+        run: make V=1 ${{ matrix.dist && 'dist' || '' }}
+
+      - name: Test
+        if: ${{ !matrix.dist }}
+        run: make check
+
+      - name: Show test logs
+        if: failure()
+        run: |
+          for f in tests/*.log test-suite.log; do
+            [ -f "$f" ] || continue
+            echo; echo "${f}:"; cat "$f"
+          done
+
+  # macOS runners are scarce: instead of one job per configuration, one job
+  # per architecture builds and tests every configuration in turn, each in its
+  # own copy of the tree.
+  macos:
+    name: macos-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, os: macos-26-intel }
+          # GitHub rarely finds an arm64 macOS runner: the job usually waits
+          # until it is cancelled. CircleCI builds and tests arm64 macOS.
+          # - { arch: arm64, os: macos-26 }
+    env:
+      CC: clang
+    steps:
+      # package_version.sh derives the version from tags via git describe.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Homebrew installs libtoolize as glibtoolize, and keg-only OpenSSL
+      # outside the default pkg-config search path.
+      - name: Install dependencies
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          brew install autoconf automake libtool pkgconf openssl@3
+          echo "$(brew --prefix libtool)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Generate the build system
+        run: ./autogen.sh
+
+      - name: Build and test each configuration
+        run: |
+          failed=
+          for config in "clang:" \
+                        "static:--disable-shared" \
+                        "nothreads:--disable-threads" \
+                        "static-nothreads:--disable-shared --disable-threads" \
+                        "tls:--enable-tls"; do
+            name=${config%%:*}
+            dir=$RUNNER_TEMP/$name
+            cp -R . "$dir"
+            echo "::group::$name"
+            (cd "$dir" &&
+             ./configure ${config#*:} CFLAGS="-O3 -DDILL_SLOW_TESTS" &&
+             make V=1 &&
+             make check) && status=0 || status=1
+            echo "::endgroup::"
+            if [ $status != 0 ]; then
+              failed="$failed $name"
+              echo "::error::$name failed"
+              for f in "$dir"/tests/*.log "$dir"/test-suite.log; do
+                [ -f "$f" ] || continue
+                echo; echo "$name: ${f#"$dir"/}:"; cat "$f"
+              done
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "Failed configurations:$failed"
+            exit 1
+          fi
