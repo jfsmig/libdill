@@ -120,6 +120,7 @@ check_PROGRAMS = \
     tests/chan \
     tests/choose \
     tests/sleep \
+    tests/atexit \
     tests/signals \
     tests/overload \
     tests/rbtree \
