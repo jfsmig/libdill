@@ -40,6 +40,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#if defined DILL_THREADS
+#include <pthread.h>
+#endif
 
 #include "dns/dns.h"
 
@@ -54,6 +57,26 @@ DILL_CT_ASSERT(sizeof(struct dill_ipaddr) >= sizeof(struct sockaddr_in6));
 static struct dns_resolv_conf *dill_dns_conf = NULL;
 static struct dns_hosts *dill_dns_hosts = NULL;
 static struct dns_hints *dill_dns_hints = NULL;
+
+/* The DNS configuration above is shared by all the threads. The lock is held
+   while loading it, and by each query while checking that it is loaded. */
+#if defined DILL_THREADS
+static pthread_mutex_t dill_dns_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
+static void dill_dns_lock(void) {
+#if defined DILL_THREADS
+    int rc = pthread_mutex_lock(&dill_dns_mutex);
+    dill_assert(rc == 0);
+#endif
+}
+
+static void dill_dns_unlock(void) {
+#if defined DILL_THREADS
+    int rc = pthread_mutex_unlock(&dill_dns_mutex);
+    dill_assert(rc == 0);
+#endif
+}
 
 /* Loads the DNS configuration files and caches them for all the queries to
    come. Nothing is cached unless all of them can be loaded. */
@@ -341,11 +364,18 @@ int dill_ipaddr_remotes(struct dill_ipaddr *addrs, int naddrs,
     }
     /* We are going to do a DNS query here so load DNS config files,
        unless they are already chached. */
+    dill_dns_lock();
     if(dill_slow(!dill_dns_conf)) {
         /* TODO: Maybe re-read the configuration once in a while? */
         rc = dill_dns_loadconf();
-        if(dill_slow(rc < 0)) return -1;
+        if(dill_slow(rc < 0)) {
+            int err = errno;
+            dill_dns_unlock();
+            errno = err;
+            return -1;
+        }
     }
+    dill_dns_unlock();
     /* Launch the actual DNS query. */
     struct dns_resolver *resolver = dns_res_open(dill_dns_conf,
         dill_dns_hosts, dill_dns_hints, NULL, dns_opts(), &rc);
