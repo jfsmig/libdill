@@ -239,6 +239,34 @@ int main() {
     rc = hclose(s[1]);
     errno_assert(rc == 0);
 
+    /* Once receiving a descriptor has failed because the peer is gone, it
+       keeps failing the same way. Which error a peer closing with unread
+       data causes depends on the platform. */
+    rc = ipc_pair(s);
+    errno_assert(rc == 0);
+    rc = bsend(s[0], "ABC", 3, -1);
+    errno_assert(rc == 0);
+    rc = hclose(s[1]);
+    errno_assert(rc == 0);
+    rc = ipc_recvfd(s[0], -1);
+    errno_assert(rc == -1);
+    int reason = errno;
+    rc = ipc_recvfd(s[0], -1);
+    errno_assert(rc == -1 && errno == reason);
+    rc = hclose(s[0]);
+    errno_assert(rc == 0);
+
+    /* Receiving on a socket that was never connected is the caller's error
+       and is reported as an error. */
+    int unconnected = socket(AF_UNIX, SOCK_STREAM, 0);
+    errno_assert(unconnected >= 0);
+    unconnected = ipc_fromfd(unconnected);
+    errno_assert(unconnected >= 0);
+    rc = ipc_recvfd(unconnected, now() + 100);
+    errno_assert(rc == -1);
+    rc = hclose(unconnected);
+    errno_assert(rc == 0);
+
     /* Try skipping some data using an iolist. */
     rc = ipc_pair(s);
     errno_assert(rc == 0);
