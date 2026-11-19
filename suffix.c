@@ -156,6 +156,9 @@ static ssize_t dill_suffix_mrecvl(struct dill_msock_vfs *mvfs,
     iol.iol_base = self->buf + self->suffixlen - 1;
     iol.iol_len = 1;
     size_t sz = 0;
+    /* Without an iolist the message is received and dropped. */
+    struct dill_iolist drop = {NULL, SIZE_MAX, NULL, 0};
+    if(!first) first = &drop;
     struct dill_iolist it = *first;
     while(1) {
         /* Check for suffix. */
