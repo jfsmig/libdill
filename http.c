@@ -306,7 +306,7 @@ int dill_http_recvfield(int s, char *name, size_t namelen,
     while(obj->rxbuf[pos] == ' ') ++pos;
     /* Value. */
     start = pos;
-    pos = dill_rstrip(obj->rxbuf + sz, ' ') - obj->rxbuf;
+    pos = dill_rstrip(obj->rxbuf + start, ' ') - obj->rxbuf;
     if(dill_slow(pos - start > valuelen - 1)) {errno = EMSGSIZE; return -1;}
     memcpy(value, obj->rxbuf + start, pos - start);
     value[pos - start] = 0;
