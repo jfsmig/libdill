@@ -350,7 +350,57 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(u[0]);
     errno_assert(rc == 0);
-    
+
+    /* Handshake with a peer that doesn't speak TLS fails. */
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    rc = bsend(u[1], "This is not a TLS record.", 25, -1);
+    errno_assert(rc == 0);
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s == -1 && errno == EFAULT);
+    rc = hclose(u[1]);
+    errno_assert(rc == 0);
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    rc = bsend(u[1], "This is not a TLS record.", 25, -1);
+    errno_assert(rc == 0);
+    s = tls_attach_client(u[0], -1);
+    errno_assert(s == -1 && errno == EFAULT);
+    rc = hclose(u[1]);
+    errno_assert(rc == 0);
+
+    /* Handshake with a peer that closes the connection fails. */
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    rc = hclose(u[1]);
+    errno_assert(rc == 0);
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s == -1 && errno == EPIPE);
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    rc = hclose(u[1]);
+    errno_assert(rc == 0);
+    s = tls_attach_client(u[0], -1);
+    errno_assert(s == -1 && errno == ECONNRESET);
+
+    /* Handshake with a silent peer fails when the deadline expires. */
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    int64_t start = now();
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", start + 50);
+    errno_assert(s == -1 && errno == ETIMEDOUT);
+    time_assert(now() - start, 50);
+    rc = hclose(u[1]);
+    errno_assert(rc == 0);
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    start = now();
+    s = tls_attach_client(u[0], start + 50);
+    errno_assert(s == -1 && errno == ETIMEDOUT);
+    time_assert(now() - start, 50);
+    rc = hclose(u[1]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 

@@ -108,7 +108,7 @@ int dill_tls_attach_client_mem(int s, struct dill_tls_storage *mem,
     self->ctx = ctx;
     self->ssl = ssl;
     self->u = s;
-    self->deadline = -1;
+    self->deadline = deadline;
     self->indone = 0;
     self->outdone = 0;
     self->inerr = 0;
@@ -121,8 +121,8 @@ int dill_tls_attach_client_mem(int s, struct dill_tls_storage *mem,
         ERR_clear_error();
         int rc = SSL_connect(ssl);
         if(dill_tls_followup(self, rc)) break;
-        if(dill_slow(errno != 0)) {err = errno; goto error3;}
     }
+    if(dill_slow(errno != 0)) {err = errno; goto error3;}
     /* Create the handle. */
     int h = dill_hmake(&self->hvfs);
     if(dill_slow(h < 0)) {err = errno; goto error3;}
@@ -194,7 +194,7 @@ int dill_tls_attach_server_mem(int s, const char *cert, const char *pkey,
     self->ctx = ctx;
     self->ssl = ssl;
     self->u = s;
-    self->deadline = -1;
+    self->deadline = deadline;
     self->indone = 0;
     self->outdone = 0;
     self->inerr = 0;
@@ -207,8 +207,8 @@ int dill_tls_attach_server_mem(int s, const char *cert, const char *pkey,
         ERR_clear_error();
         rc = SSL_accept(ssl);
         if(dill_tls_followup(self, rc)) break;
-        if(dill_slow(errno != 0)) {err = errno; goto error3;}
     }
+    if(dill_slow(errno != 0)) {err = errno; goto error3;}
     /* Create the handle. */
     int h = dill_hmake(&self->hvfs);
     if(dill_slow(h < 0)) {err = errno; goto error3;}
