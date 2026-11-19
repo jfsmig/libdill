@@ -264,6 +264,9 @@ int dill_prologue(sigjmp_buf **jb, void **ptr, size_t len, int bndl,
     int new_bundle = bndl < 0;
     if(new_bundle) {
         if(*ptr) {
+            /* The bundle itself has to fit into the block. */
+            if(dill_slow(len < sizeof(struct dill_bundle_storage))) {
+                err = ENOMEM; goto error1;}
             bndl = dill_bundle_mem(*ptr);
             *ptr = ((uint8_t*)*ptr) + sizeof(struct dill_bundle_storage);
             len -= sizeof(struct dill_bundle_storage);
@@ -288,6 +291,8 @@ int dill_prologue(sigjmp_buf **jb, void **ptr, size_t len, int bndl,
         uintptr_t top = (uintptr_t)*ptr;
         top += len;
         top &= ~(uintptr_t)15;
+        /* In a tiny buffer the aligned top may lie below its start. */
+        if(dill_slow(top < (uintptr_t)*ptr)) {err = ENOMEM; goto error2;}
         stacksz = top - (uintptr_t)*ptr;
         cr = (struct dill_cr*)top;
         if(dill_slow(stacksz < sizeof(struct dill_cr))) {

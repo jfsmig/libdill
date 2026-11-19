@@ -48,6 +48,24 @@ int main() {
         errno_assert(rc == 0);
         free(stack);
     }
+
+    /* Test go_mem with memory too small to hold the coroutine. The memory
+       is taken from the middle of a larger block so that nothing else gets
+       overwritten if the coroutine is launched anyway. */
+    char *block = malloc(65536);
+    assert(block);
+    char *middle = block + 32768;
+    int cr = go_mem(dummy(), middle, 32);
+    errno_assert(cr == -1 && errno == ENOMEM);
+    /* Here nothing is left once the top of the stack is aligned. */
+    int b = bundle();
+    errno_assert(b >= 0);
+    int rc = bundle_go_mem(b, dummy(), middle + 8, 4);
+    errno_assert(rc == -1 && errno == ENOMEM);
+    rc = hclose(b);
+    errno_assert(rc == 0);
+    free(block);
+
     return 0;
 }
 
