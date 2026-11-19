@@ -251,6 +251,7 @@ int dill_tls_done(int s, int64_t deadline) {
     if(dill_slow(self->sbusy)) {errno = EBUSY; return -1;}
     if(dill_slow(self->outerr)) {errno = ECONNRESET; return -1;}
     if(dill_slow(self->outdone)) {errno = EPIPE; return -1;}
+    self->deadline = deadline;
     while(1) {
         ERR_clear_error();
         int rc = SSL_shutdown(self->ssl);
@@ -271,6 +272,7 @@ int dill_tls_detach(int s, int64_t deadline) {
        would free it under the coroutine that is blocked in it. */
     if(dill_slow(self->rbusy || self->sbusy)) {errno = EBUSY; return -1;}
     if(dill_slow(self->inerr || self->outerr)) {err = ECONNRESET; goto error;}
+    self->deadline = deadline;
     /* Start terminal TLS handshake. */
     if(!self->outdone) {
         int rc = dill_tls_done(s, deadline);
