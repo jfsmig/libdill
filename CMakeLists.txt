@@ -6,6 +6,31 @@ project(libdill VERSION 1.6 LANGUAGES C)
 
 include(CheckSymbolExists)
 include(CheckFunctionExists)
+include(CheckCSourceCompiles)
+include(CheckCCompilerFlag)
+
+# Without assembly for the target, go() moves the stack pointer with one
+# alloca() spanning the gap to the coroutine stack (see libdill.h). Stack
+# probing, which many compilers enable by default, touches every page of that
+# gap and crashes, so turn it off for the generic code. The architectures
+# listed here must match those with assembly in libdill.h, as in configure.ac.
+check_c_source_compiles("
+#if defined __x86_64__ || defined __i386__ || defined __aarch64__
+#if !defined DILL_ARCH_FALLBACK
+#error assembly stack switching is available
+#endif
+#endif
+int main(void) {return 0;}
+" DILL_GENERIC_SETSP)
+if(DILL_GENERIC_SETSP)
+  foreach(flag -fno-stack-clash-protection -fno-stack-check)
+    string(MAKE_C_IDENTIFIER "HAVE${flag}" flag_accepted)
+    check_c_compiler_flag(${flag} ${flag_accepted})
+    if(${flag_accepted})
+      add_compile_options(${flag})
+    endif()
+  endforeach()
+endif()
 
 file(GLOB sources ${CMAKE_CURRENT_LIST_DIR}/*.c ${CMAKE_CURRENT_LIST_DIR}/dns/dns.c)
 include_directories(${PROJECT_SOURCE_DIR} "${PROJECT_SOURCE_DIR}/dns")

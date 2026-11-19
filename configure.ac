@@ -72,6 +72,34 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
     [AC_MSG_RESULT([no])])
 CFLAGS="$dill_save_CFLAGS"
 
+# Without assembly for the target, go() moves the stack pointer with one
+# alloca() spanning the gap to the coroutine stack (see libdill.h). Stack
+# probing, which many compilers enable by default, touches every page of that
+# gap and crashes, so turn it off for the generic code. The architectures
+# listed here must match those with assembly in libdill.h, as in
+# CMakeLists.txt.
+AC_MSG_CHECKING([whether go() uses the generic stack switching])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#if (defined __x86_64__ || defined __i386__ || defined __aarch64__) && \
+    !defined DILL_ARCH_FALLBACK
+#error "assembly stack switching is available"
+#endif
+]])],
+    [dill_generic_setsp=yes],
+    [dill_generic_setsp=no])
+AC_MSG_RESULT([$dill_generic_setsp])
+if test "x$dill_generic_setsp" = "xyes"; then
+    for dill_flag in -fno-stack-clash-protection -fno-stack-check; do
+        AC_MSG_CHECKING([whether $CC accepts $dill_flag])
+        dill_save_CFLAGS="$CFLAGS"
+        CFLAGS="$CFLAGS $dill_flag"
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
+            [AC_MSG_RESULT([yes])],
+            [AC_MSG_RESULT([no])
+             CFLAGS="$dill_save_CFLAGS"])
+    done
+fi
+
 AM_PROG_CC_C_O
 
 ################################################################################

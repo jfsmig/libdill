@@ -247,8 +247,13 @@ DILL_EXPORT __attribute__((noinline)) void dill_epilogue(void);
 #else
 #define dill_setjmp(ctx) sigsetjmp(ctx, 0)
 #define dill_longjmp(ctx) siglongjmp(ctx, 1)
-/* For newer GCCs, -fstack-protector breaks on this; use -fno-stack-protector.
-   Alternatively, implement a custom dill_setsp for your microarchitecture. */
+/* dill_setsp() moves the stack pointer with an alloca() spanning the gap to
+   the coroutine stack. Stack probing touches every page of that gap and
+   crashes, so code calling go() must be compiled with
+   -fno-stack-clash-protection and -fno-stack-check; configure and CMake do
+   it for libdill. For newer GCCs, -fstack-protector breaks on this too; use
+   -fno-stack-protector. Alternatively, implement a custom dill_setsp for your
+   microarchitecture. */
 #define dill_setsp(x) \
     dill_unoptimisable = alloca((char*)alloca(sizeof(size_t)) - (char*)(x));
 #endif
