@@ -111,6 +111,47 @@ coroutine void clientbyname(int s, char *user, char* pass) {
     return;
 }
 
+// RFC 1929 allows a user name and a password of 255 bytes each. The proxy's
+// replies are queued up front; once the client is done, the authentication
+// request it sent is checked byte by byte.
+static void client_sends_longest_credentials(void) {
+    char user[256];
+    char pass[256];
+    memset(user, 'u', 255);
+    user[255] = '\x00';
+    memset(pass, 'p', 255);
+    pass[255] = '\x00';
+    int h[2];
+    int rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    // select USER/PASS, accept the credentials, report a successful CONNECT
+    uint8_t replies[] = {0x05, 0x02, 0x01, 0x00,
+        0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0};
+    rc = bsend(h[0], replies, sizeof(replies), -1);
+    errno_assert(rc == 0);
+    struct ipaddr addr;
+    rc = ipaddr_local(&addr, "127.0.0.1", 5555, 0);
+    errno_assert(rc == 0);
+    rc = socks5_client_connect(h[1], user, pass, &addr, now() + 1000);
+    errno_assert(rc == 0);
+    uint8_t methods[4];
+    rc = brecv(h[0], methods, sizeof(methods), now() + 1000);
+    errno_assert(rc == 0);
+    // VER, ULEN, UNAME, PLEN, PASSWD
+    uint8_t auth[513];
+    rc = brecv(h[0], auth, sizeof(auth), now() + 1000);
+    errno_assert(rc == 0);
+    assert(auth[0] == 0x01);
+    assert(auth[1] == 255);
+    assert(memcmp(auth + 2, user, 255) == 0);
+    assert(auth[257] == 255);
+    assert(memcmp(auth + 258, pass, 255) == 0);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+    rc = hclose(h[0]);
+    errno_assert(rc == 0);
+}
+
 void server(int s) {
     uint8_t buf[16];
     // impersonate server
@@ -300,6 +341,8 @@ typedef char *up_t[2];
 typedef void test_fn(int s, char *user, char* pass);
 
 int main(void) {
+    client_sends_longest_credentials();
+
     int h[2];
     int rc = ipc_pair(h);
     assert(rc == 0);
