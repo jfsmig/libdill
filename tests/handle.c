@@ -111,6 +111,29 @@ int main(void) {
     rc = hclose(ch[1]);
     errno_assert(rc == 0);
 
+    /* Test that handle numbers rotate: whatever the number of open handles,
+       even after the handle table has grown, the number of a handle that was
+       just closed is not handed out again straight away. */
+    int hndls[600];
+    int i;
+    for(i = 0; i != 600; ++i) {
+        hndls[i] = hmake(&t.vfs);
+        errno_assert(hndls[i] >= 0);
+        int closed = hmake(&t.vfs);
+        errno_assert(closed >= 0);
+        rc = hclose(closed);
+        errno_assert(rc == 0);
+        int next = hmake(&t.vfs);
+        errno_assert(next >= 0);
+        assert(next != closed);
+        rc = hclose(next);
+        errno_assert(rc == 0);
+    }
+    for(i = 0; i != 600; ++i) {
+        rc = hclose(hndls[i]);
+        errno_assert(rc == 0);
+    }
+
     return 0;
 }
 
