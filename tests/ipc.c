@@ -112,6 +112,35 @@ coroutine void client4(int s) {
     errno_assert(rc == -1 && errno == ETIMEDOUT);
 }
 
+/* Passes two file descriptors in one message, which ipc_sendfd() never does
+   but any other peer is free to do. */
+static void send_two_fds(int s, int fd1, int fd2) {
+    int fds[2] = {fd1, fd2};
+    union {
+        struct cmsghdr align;
+        char buf[64];
+    } control;
+    assert(CMSG_SPACE(sizeof(fds)) <= sizeof(control.buf));
+    memset(&control, 0, sizeof(control));
+    char byte = 0;
+    struct iovec iov;
+    iov.iov_base = &byte;
+    iov.iov_len = 1;
+    struct msghdr msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control.buf;
+    msg.msg_controllen = CMSG_SPACE(sizeof(fds));
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(fds));
+    memcpy(CMSG_DATA(cmsg), fds, sizeof(fds));
+    ssize_t sz = sendmsg(s, &msg, 0);
+    errno_assert(sz == 1);
+}
+
 int main() {
     char buf[16];
 
@@ -342,6 +371,36 @@ int main() {
     rc = hclose(s[0]);
     errno_assert(rc == 0);
     rc = hclose(s[1]);
+    errno_assert(rc == 0);
+
+    /* Only one of several descriptors received in one message can be
+       returned; the others must be closed, not leaked. The extra one is
+       the write end of a pipe: the read end reaches the end of the stream
+       only once every copy of the write end is closed. */
+    int raw[2];
+    rc = socketpair(AF_UNIX, SOCK_STREAM, 0, raw);
+    errno_assert(rc == 0);
+    int receiver = ipc_fromfd(raw[1]);
+    errno_assert(receiver >= 0);
+    int extra[2];
+    rc = pipe(extra);
+    errno_assert(rc == 0);
+    send_two_fds(raw[0], STDERR_FILENO, extra[1]);
+    rc = close(extra[1]);
+    errno_assert(rc == 0);
+    int kept = ipc_recvfd(receiver, -1);
+    errno_assert(kept >= 0);
+    rc = close(kept);
+    errno_assert(rc == 0);
+    rc = fcntl(extra[0], F_SETFL, O_NONBLOCK);
+    errno_assert(rc == 0);
+    sz = read(extra[0], buf, 1);
+    errno_assert(sz == 0);
+    rc = close(extra[0]);
+    errno_assert(rc == 0);
+    rc = close(raw[0]);
+    errno_assert(rc == 0);
+    rc = hclose(receiver);
     errno_assert(rc == 0);
 
     return 0;
