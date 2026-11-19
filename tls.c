@@ -327,6 +327,17 @@ static int dill_tls_bsendl(struct dill_bsock_vfs *bvfs,
     return 0;
 }
 
+/* Reads up to len bytes of application data. If there's no buffer the data
+   is dropped. OpenSSL has to be given somewhere to put it all the same. */
+static int dill_tls_read(struct dill_tls_sock *self, uint8_t *buf, size_t len) {
+    uint8_t dropped[512];
+    if(!buf) {
+        buf = dropped;
+        if(len > sizeof(dropped)) len = sizeof(dropped);
+    }
+    return SSL_read(self->ssl, buf, len);
+}
+
 static int dill_tls_brecvl(struct dill_bsock_vfs *bvfs,
       struct dill_iolist *first, struct dill_iolist *last, int64_t deadline) {
     struct dill_tls_sock *self = dill_cont(bvfs, struct dill_tls_sock, bvfs);
@@ -339,9 +350,9 @@ static int dill_tls_brecvl(struct dill_bsock_vfs *bvfs,
     while(1) {
         uint8_t *base = it->iol_base;
         size_t len = it->iol_len;
-        while(1) {
+        while(len > 0) {
             ERR_clear_error();
-            int rc = SSL_read(self->ssl, base, len);
+            int rc = dill_tls_read(self, base, len);
             if(dill_tls_followup(self, rc)) {
                 if(dill_slow(errno != 0)) {
                     if(errno == EPIPE) self->indone = 1;
@@ -349,8 +360,7 @@ static int dill_tls_brecvl(struct dill_bsock_vfs *bvfs,
                     self->rbusy = 0;
                     return -1;
                 }
-                if(rc == len) break;
-                base += rc;
+                if(base) base += rc;
                 len -= rc;
             }
         }
