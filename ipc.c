@@ -351,10 +351,12 @@ int dill_ipc_close(int s, int64_t deadline) {
     int rc = dill_ipc_brecvl(&self->bvfs, NULL, NULL, deadline);
     dill_assert(rc < 0);
     if(dill_slow(errno != EPIPE)) {err = errno; goto error;}
-    dill_ipc_hclose(&self->hvfs);
+    rc = dill_hclose(s);
+    dill_assert(rc == 0);
     return 0;
 error:
-    dill_ipc_hclose(&self->hvfs);
+    rc = dill_hclose(s);
+    dill_assert(rc == 0);
     errno = err;
     return -1;
 }

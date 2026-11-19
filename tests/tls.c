@@ -87,7 +87,9 @@ int main(void) {
     errno_assert(rc == 0);
     int cr = go(client1(u[1]));
     errno_assert(cr >= 0);
-    int s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    struct tls_storage mem;
+    int s = tls_attach_server_mem(u[0], "tests/cert.pem", "tests/key.pem",
+        &mem, -1);
     errno_assert(s >= 0);
     rc = brecv(s, buf, 3, -1);
     errno_assert(rc == 0);
@@ -100,6 +102,9 @@ int main(void) {
     errno_assert(rc == 0);
     u[0] = tls_detach(s, -1);
     errno_assert(u[0] >= 0);
+    /* The detached socket is gone, only the underlying one remains. */
+    rc = hclose(s);
+    errno_assert(rc == -1 && errno == EBADF);
     rc = hclose(u[0]);
     errno_assert(rc == 0);
     rc = bundle_wait(cr, -1);

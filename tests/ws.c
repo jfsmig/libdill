@@ -120,6 +120,28 @@ int main(void) {
     rc = hclose(cr);
     errno_assert(rc == 0);
     
+    /* The detached socket is gone, only the underlying one remains. */
+    rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    struct ws_storage mem;
+    int s0 = ws_attach_server_mem(p[0], WS_NOHTTP | WS_TEXT, NULL, 0, NULL, 0,
+        &mem, -1);
+    errno_assert(s0 >= 0);
+    int s1 = ws_attach_client(p[1], WS_NOHTTP | WS_TEXT, NULL, NULL, -1);
+    errno_assert(s1 >= 0);
+    rc = ws_done(s1, 1000, NULL, 0, -1);
+    errno_assert(rc == 0);
+    p[0] = ws_detach(s0, 1000, NULL, 0, -1);
+    errno_assert(p[0] >= 0);
+    rc = hclose(s0);
+    errno_assert(rc == -1 && errno == EBADF);
+    p[1] = ws_detach(s1, 0, NULL, 0, -1);
+    errno_assert(p[1] >= 0);
+    rc = hclose(p[1]);
+    errno_assert(rc == 0);
+    rc = hclose(p[0]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
