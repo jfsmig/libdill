@@ -58,7 +58,8 @@ int dill_brecvl(int s, struct dill_iolist *first, struct dill_iolist *last,
       int64_t deadline) {
     struct dill_bsock_vfs *b = dill_hquery(s, dill_bsock_type);
     if(dill_slow(!b)) return -1;
-    if(dill_slow((first && !last) || (!first && last) || last->iol_next)) {
+    if(dill_slow((first && !last) || (!first && last) ||
+          (last && last->iol_next))) {
         errno = EINVAL; return -1;}
     return b->brecvl(b, first, last, deadline);
 }
