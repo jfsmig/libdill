@@ -24,7 +24,11 @@
 */
 
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
+#if defined DILL_THREADS
+#include <pthread.h>
+#endif
 #include <string.h>
 #include <sys/param.h>
 #include <sys/resource.h>
@@ -109,15 +113,40 @@ const char *dill_rstrip(const char *string, char delim) {
     return ++end;
 }
 
-int dill_random(uint8_t *buf, size_t len) {
+/* Returns the file descriptor of the system's source of random bytes. It is
+   opened on first use and shared by all the threads from then on. */
+static int dill_random_fd(void) {
     static int fd = -1;
-    if(dill_slow(fd < 0)) {
-        fd = open("/dev/urandom", O_RDONLY);
-        dill_assert(fd >= 0);
+#if defined DILL_THREADS
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    int rc = pthread_mutex_lock(&mutex);
+    dill_assert(rc == 0);
+#endif
+    if(dill_slow(fd < 0)) fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    int res = fd;
+    int err = errno;
+#if defined DILL_THREADS
+    rc = pthread_mutex_unlock(&mutex);
+    dill_assert(rc == 0);
+#endif
+    errno = err;
+    return res;
+}
+
+int dill_random(uint8_t *buf, size_t len) {
+    int fd = dill_random_fd();
+    if(dill_slow(fd < 0)) return -1;
+    while(len) {
+        ssize_t sz = read(fd, buf, len);
+        if(dill_slow(sz < 0)) {
+            if(errno == EINTR) continue;
+            return -1;
+        }
+        /* The source of random bytes has no end. */
+        if(dill_slow(sz == 0)) {errno = EIO; return -1;}
+        buf += sz;
+        len -= sz;
     }
-    ssize_t sz = read(fd, buf, len);
-    if(dill_slow(sz < 0)) return -1;
-    dill_assert(sz == len);
     return 0;
 }
 
