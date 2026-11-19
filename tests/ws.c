@@ -23,9 +23,39 @@
 */
 
 #include <string.h>
+#include <sys/resource.h>
 
 #include "assert.h"
 #include "../libdill.h"
+
+/* A client masks every frame with random bytes. Check that it fails cleanly,
+   and recovers, when the source of randomness cannot be opened. This has to
+   run before anything else sends a frame from the client side. */
+static void client_send_without_random_source(void) {
+    int p[2];
+    int rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    int s = ws_attach_client(p[1], WS_NOHTTP | WS_BINARY, NULL, NULL, -1);
+    errno_assert(s >= 0);
+    /* Leave no file descriptor available. */
+    struct rlimit old;
+    rc = getrlimit(RLIMIT_NOFILE, &old);
+    errno_assert(rc == 0);
+    struct rlimit none = old;
+    none.rlim_cur = 0;
+    rc = setrlimit(RLIMIT_NOFILE, &none);
+    errno_assert(rc == 0);
+    rc = msend(s, "ABC", 3, -1);
+    errno_assert(rc == -1 && errno == EMFILE);
+    rc = setrlimit(RLIMIT_NOFILE, &old);
+    errno_assert(rc == 0);
+    rc = msend(s, "ABC", 3, -1);
+    errno_assert(rc == 0);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+    rc = hclose(p[0]);
+    errno_assert(rc == 0);
+}
 
 coroutine void nohttp_client(int s) {
     s = ws_attach_client(s, WS_NOHTTP | WS_TEXT, NULL, NULL, -1);
@@ -75,6 +105,8 @@ coroutine void http_client(int s) {
 }
 
 int main(void) {
+    client_send_without_random_source();
+
     int p[2];
     int rc = ipc_pair(p);
     errno_assert(rc == 0);
