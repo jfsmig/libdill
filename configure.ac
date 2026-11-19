@@ -57,6 +57,21 @@ AC_MSG_NOTICE([libdill ABI version: $DILL_ABI_VERSION])
 ################################################################################
 
 AC_PROG_CC_C99
+
+# Pin C99 instead of using the compiler's default standard: since C23, an
+# empty parameter list means "no parameters", which breaks the unprototyped
+# function pointers in dns/dns.c. The GNU dialect is needed for asm and
+# statement expressions. Like AC_PROG_CC, add the option to CC so that CFLAGS
+# can still override it.
+AC_MSG_CHECKING([whether $CC accepts -std=gnu99])
+dill_save_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -std=gnu99"
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM()],
+    [AC_MSG_RESULT([yes])
+     CC="$CC -std=gnu99"],
+    [AC_MSG_RESULT([no])])
+CFLAGS="$dill_save_CFLAGS"
+
 AM_PROG_CC_C_O
 
 ################################################################################
