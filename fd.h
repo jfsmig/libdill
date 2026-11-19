@@ -33,6 +33,14 @@
 #include "libdill.h"
 #include "slist.h"
 
+/* Flag for send functions: don't raise SIGPIPE when the peer is gone.
+   Where it does not exist, dill_fd_unblock() sets SO_NOSIGPIPE instead. */
+#if defined MSG_NOSIGNAL
+#define FD_NOSIGNAL MSG_NOSIGNAL
+#else
+#define FD_NOSIGNAL 0
+#endif
+
 struct dill_ctx_fd {
     int count;
     struct dill_slist cache;
