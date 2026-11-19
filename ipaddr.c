@@ -418,6 +418,13 @@ int dill_ipaddr_remotes(struct dill_ipaddr *addrs, int naddrs,
             continue;
         }
         if(rc == ENOENT || (rc >= DNS_EBASE && rc <= DNS_ELAST)) break;
+        /* Any other error comes from the system, not from the DNS. Typically,
+           no name server can be reached. There is no result to look at. */
+        if(dill_slow(rc != 0)) {
+            dns_ai_close(ai);
+            errno = rc;
+            return -1;
+        }
         if(naddrs && mode == DILL_IPADDR_IPV4 && it->ai_family == AF_INET) {
             struct sockaddr_in *inaddr = (struct sockaddr_in*)addrs;
             memcpy(inaddr, it->ai_addr, sizeof (struct sockaddr_in));
