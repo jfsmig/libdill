@@ -86,6 +86,21 @@ int main(void) {
     s = term_attach_mem(s, terminator, 1, NULL);
     errno_assert(s == -1 && errno == EINVAL);
 
+    /* Detaching fails if the peer closes the connection without sending
+       the terminator. */
+    rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    rc = ipc_done(p[0], -1);
+    errno_assert(rc == 0);
+    s = suffix_attach(p[1], "\r\n", 2);
+    errno_assert(s >= 0);
+    s = term_attach(s, "STOP", 4);
+    errno_assert(s >= 0);
+    s = term_detach(s, -1);
+    errno_assert(s == -1 && errno == EPIPE);
+    rc = hclose(p[0]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
