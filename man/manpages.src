@@ -3746,13 +3746,15 @@ fxs = [
         prologue: `
             This function does the terminal WebSocket handshake and returns
             the underlying socket to the user. The socket is closed even in the
-            case of error.
+            case of error, except for **EBUSY**: the socket is then left
+            untouched for the coroutine that is using it.
         `,
 
         has_handle_argument: true,
         has_deadline: true,
         uses_connection: true,
 
+        errors: ["EBUSY"],
         custom_errors: {
             ENOTSUP: "The handle is not an WebSocket protocol handle.",
         },
