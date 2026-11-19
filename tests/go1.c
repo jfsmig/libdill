@@ -40,6 +40,17 @@ coroutine void worker(int count, int n) {
     }
 }
 
+/* More arguments than the registers can hold: the others are passed on the
+   stack, while go() is switching to the coroutine's own. Being resumed after
+   blocking relies on the coroutine's record, which lies next to them. */
+coroutine void many_args(long a1, long a2, long a3, long a4, long a5,
+      long a6, long a7, long a8, long a9, long a10) {
+    int rc = msleep(now() + 1);
+    errno_assert(rc == 0);
+    assert(a1 == 1 && a2 == 2 && a3 == 3 && a4 == 4 && a5 == 5 &&
+        a6 == 6 && a7 == 7 && a8 == 8 && a9 == 9 && a10 == 10);
+}
+
 int main() {
     /* Basic test. Run some coroutines. */
     int cr1 = go(worker(3, 7));
@@ -57,6 +68,14 @@ int main() {
     rc = hclose(cr3);
     errno_assert(rc == 0);
     assert(sum == 42);
+
+    /* Arguments passed on the stack. */
+    int cr4 = go(many_args(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+    errno_assert(cr4 >= 0);
+    rc = bundle_wait(cr4, -1);
+    errno_assert(rc == 0);
+    rc = hclose(cr4);
+    errno_assert(rc == 0);
 
     return 0;
 }

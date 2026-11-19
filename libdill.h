@@ -221,6 +221,28 @@ DILL_EXPORT __attribute__((noinline)) void dill_epilogue(void);
     asm(""::"r"(alloca(sizeof(size_t))));\
     asm volatile("leal (%%eax), %%esp"::"eax"(x));
 
+/* Stack switching on ARM64. sigsetjmp() and siglongjmp() save and restore
+   the context; only setting the stack pointer needs assembly. The generic
+   alloca() trick below crashes on macOS, and with stack probing such as
+   GCC's -fstack-clash-protection, which many distributions enable by
+   default. The small alloca() has a size the compiler cannot predict (x is
+   aligned, so x & 1 is zero), which makes it address locals through the
+   frame pointer rather than through the stack pointer that is moved.
+   GCC passes the arguments that do not fit in registers in an area that
+   starts at the stack pointer and ends where the memory alloca() returns
+   begins. The stack pointer is set that much below x, so that the call
+   puts those arguments under the coroutine at x rather than over it. */
+#elif defined(__aarch64__) && !defined DILL_ARCH_FALLBACK
+#define dill_setjmp(ctx) sigsetjmp(ctx, 0)
+#define dill_longjmp(ctx) siglongjmp(ctx, 1)
+#define dill_setsp(x) \
+    void *dill_dyn__ = alloca(sizeof(size_t) + ((uintptr_t)(x) & 1));\
+    asm volatile("mov x16, sp\n\t"\
+                 "sub x16, %1, x16\n\t"\
+                 "sub x16, %0, x16\n\t"\
+                 "mov sp, x16"\
+                 ::"r"(x), "r"(dill_dyn__) : "x16");
+
 /* Stack-switching on other microarchitectures. */
 #else
 #define dill_setjmp(ctx) sigsetjmp(ctx, 0)
