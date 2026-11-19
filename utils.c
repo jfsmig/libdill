@@ -108,9 +108,9 @@ const char *dill_lstrip(const char *string, char delim) {
 }
 
 const char *dill_rstrip(const char *string, char delim) {
-    const char *end = string + strlen(string) - 1;
-    while(end > string && *end == delim) --end;
-    return ++end;
+    const char *end = string + strlen(string);
+    while(end > string && *(end - 1) == delim) --end;
+    return end;
 }
 
 /* Returns the file descriptor of the system's source of random bytes. It is

@@ -124,6 +124,7 @@ check_PROGRAMS = \
     tests/signals \
     tests/overload \
     tests/rbtree \
+    tests/utils \
     tests/bundle
 
 if DILL_THREADS

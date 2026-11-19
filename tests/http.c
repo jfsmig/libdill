@@ -132,6 +132,24 @@ int main(void) {
     assert(strcmp(name, "valid-field-name") == 0);
     assert(strcmp(value, "both pad") == 0);
 
+    /* Padding is stripped on reception too. The peer is played by hand,
+       because http_sendfield would strip the value before sending it. */
+    int raw[2];
+    rc = ipc_pair(raw);
+    errno_assert(rc == 0);
+    int s2 = http_attach(raw[0]);
+    errno_assert(s2 >= 0);
+    rc = bsend(raw[1], "foo:   bar baz   \r\n", 19, -1);
+    errno_assert(rc == 0);
+    rc = http_recvfield(s2, name, sizeof(name), value, sizeof(value), -1);
+    errno_assert(rc == 0);
+    assert(strcmp(name, "foo") == 0);
+    assert(strcmp(value, "bar baz") == 0);
+    rc = hclose(s2);
+    errno_assert(rc == 0);
+    rc = hclose(raw[1]);
+    errno_assert(rc == 0);
+
     rc = http_done(s0, -1);
     errno_assert(rc == 0);
     rc = http_recvfield(s1, name, sizeof(name), value, sizeof(value), -1);
