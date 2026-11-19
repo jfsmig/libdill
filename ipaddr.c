@@ -374,9 +374,11 @@ int dill_ipaddr_remotes(struct dill_ipaddr *addrs, int naddrs,
         }
     }
     dill_dns_unlock();
-    /* Launch the actual DNS query. */
+    /* Launch the actual DNS query. NULL options select the defaults. Do not
+       use dns_opts() for that: with GCC it builds the options inside a
+       statement expression, so the pointer it yields is already dangling. */
     struct dns_resolver *resolver = dns_res_open(dill_dns_conf,
-        dill_dns_hosts, dill_dns_hints, NULL, dns_opts(), &rc);
+        dill_dns_hosts, dill_dns_hints, NULL, NULL, &rc);
     if(dill_slow(!resolver)) {errno = rc; return -1;}
     dill_assert(port >= 0 && port <= 0xffff);
     char portstr[8];
