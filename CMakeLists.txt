@@ -151,6 +151,7 @@ if(BUILD_TESTING)
         tests/rbtree.c
         tests/signals.c
         tests/sleep.c
+        tests/atexit.c
         tests/socks5.c
         tests/suffix.c
         tests/tcp.c
