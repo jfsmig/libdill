@@ -85,8 +85,7 @@ DILL_CT_ASSERT(sizeof(struct dill_bundle_storage) >=
     sizeof(struct dill_bundle));
 
 int dill_bundle_mem(struct dill_bundle_storage *mem) {
-    int err;
-    if(dill_slow(!mem)) {err = EINVAL; return -1;}
+    if(dill_slow(!mem)) {errno = EINVAL; return -1;}
     struct dill_bundle *b = (struct dill_bundle*)mem;
     b->vfs.query = dill_bundle_query;
     b->vfs.close = dill_bundle_close;
