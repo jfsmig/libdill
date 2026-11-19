@@ -29,6 +29,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#if defined DILL_THREADS
+#include <pthread.h>
+#endif
+
 #define DILL_DISABLE_RAW_NAMES
 #include "libdillimpl.h"
 #include "utils.h"
@@ -485,28 +489,44 @@ static void dill_tls_term(void) {
     EVP_cleanup();
 }
 
+static void dill_tls_init_once(void) {
+    SSL_library_init();
+    SSL_load_error_strings();
+    /* Create our own custom BIO type. */
+    int idx = BIO_get_new_index();
+    dill_tls_cbio = BIO_meth_new(idx, "bsock");
+    dill_assert(dill_tls_cbio);
+    int rc = BIO_meth_set_create(dill_tls_cbio, dill_tls_cbio_create);
+    dill_assert(rc == 1);
+    rc = BIO_meth_set_destroy(dill_tls_cbio, dill_tls_cbio_destroy);
+    dill_assert(rc == 1);
+    rc = BIO_meth_set_write(dill_tls_cbio, dill_tls_cbio_write);
+    dill_assert(rc == 1);
+    rc = BIO_meth_set_read(dill_tls_cbio, dill_tls_cbio_read);
+    dill_assert(rc == 1);
+    rc = BIO_meth_set_ctrl(dill_tls_cbio, dill_tls_cbio_ctrl);
+    dill_assert(rc == 1);
+    /* Deallocate the method once the process exits. */
+    rc = atexit(dill_tls_term);
+    dill_assert(rc == 0);
+}
+
+#if defined DILL_THREADS
+
+static void dill_tls_init(void) {
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    int rc = pthread_once(&once, dill_tls_init_once);
+    dill_assert(rc == 0);
+}
+
+#else
+
 static void dill_tls_init(void) {
     static int init = 0;
     if(dill_slow(!init)) {
-        SSL_library_init();
-        SSL_load_error_strings();
-        /* Create our own custom BIO type. */
-        int idx = BIO_get_new_index();
-        dill_tls_cbio = BIO_meth_new(idx, "bsock");
-        dill_assert(dill_tls_cbio);
-        int rc = BIO_meth_set_create(dill_tls_cbio, dill_tls_cbio_create);
-        dill_assert(rc == 1);
-        rc = BIO_meth_set_destroy(dill_tls_cbio, dill_tls_cbio_destroy);
-        dill_assert(rc == 1);
-        rc = BIO_meth_set_write(dill_tls_cbio, dill_tls_cbio_write);
-        dill_assert(rc == 1);
-        rc = BIO_meth_set_read(dill_tls_cbio, dill_tls_cbio_read);
-        dill_assert(rc == 1);
-        rc = BIO_meth_set_ctrl(dill_tls_cbio, dill_tls_cbio_ctrl);
-        dill_assert(rc == 1);
-        /* Deallocate the method once the process exits. */
-        rc = atexit(dill_tls_term);
-        dill_assert(rc == 0);
+        dill_tls_init_once();
         init = 1;
     }
 }
+
+#endif

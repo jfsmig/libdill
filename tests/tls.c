@@ -29,6 +29,55 @@
 #include "assert.h"
 #include "../libdill.h"
 
+#if defined DILL_THREADS
+
+#include <pthread.h>
+
+coroutine void handshake_client(int u) {
+    int s = tls_attach_client(u, -1);
+    errno_assert(s >= 0);
+    u = tls_detach(s, -1);
+    errno_assert(u >= 0);
+    int rc = hclose(u);
+    errno_assert(rc == 0);
+}
+
+static void *handshake_thread(void *arg) {
+    int u[2];
+    int rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    int cr = go(handshake_client(u[1]));
+    errno_assert(cr >= 0);
+    int s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    u[0] = tls_detach(s, -1);
+    errno_assert(u[0] >= 0);
+    rc = hclose(u[0]);
+    errno_assert(rc == 0);
+    rc = bundle_wait(cr, -1);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+    return NULL;
+}
+
+/* The first attach in the process sets the TLS layer up. Several threads
+   doing it at the same time must not set it up more than once. */
+static void test_concurrent_first_attach(void) {
+    pthread_t threads[8];
+    int i;
+    for(i = 0; i != 8; ++i) {
+        int rc = pthread_create(&threads[i], NULL, handshake_thread, NULL);
+        assert(rc == 0);
+    }
+    for(i = 0; i != 8; ++i) {
+        int rc = pthread_join(threads[i], NULL);
+        assert(rc == 0);
+    }
+}
+
+#endif
+
 coroutine void client1(int u) {
     int s = tls_attach_client(u, -1);
     errno_assert(s >= 0);
@@ -192,6 +241,9 @@ coroutine void canceled_attach(int u, int server, int cancel_first) {
 int main(void) {
     char buf[16];
 
+#if defined DILL_THREADS
+    test_concurrent_first_attach();
+#endif
     test_busy();
 
     /* Test simple data exchange, with explicit handshake. */
