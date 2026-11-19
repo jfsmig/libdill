@@ -171,7 +171,15 @@ static void dill_ctx_term(void *ptr) {
 }
 
 static void dill_ctx_atexit(void) {
-    if(dill_main) dill_ctx_term(dill_main);
+    if(!dill_main) return;
+    /* The context is about to be freed. Make the thread forget it, so that
+       a function called later during the exit, such as another atexit()
+       handler, gets a new context if it uses libdill. */
+    if(pthread_getspecific(dill_key) == dill_main) {
+        int rc = pthread_setspecific(dill_key, NULL);
+        dill_assert(rc == 0);
+    }
+    dill_ctx_term(dill_main);
 }
 
 static void dill_makekey(void) {
