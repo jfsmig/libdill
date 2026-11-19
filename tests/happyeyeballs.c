@@ -243,6 +243,66 @@ int main(void) {
     assert(rc == -1 && errno == ETIMEDOUT);
     end_test();
 
+    /* The name resolves to no address at all. */
+    struct step test_noaddr[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 10, 0, 0, 0},
+        {OP_REMOTES, DILL_IPADDR_IPV4, NULL, 10, 0, 0, 0},
+        {OP_END}
+    };
+    start_test(test_noaddr, "no address");
+    rc = dill_happyeyeballs_connect("www.example.org", 80, dill_now() + 2000);
+    assert(rc == -1 && errno == EADDRNOTAVAIL);
+    end_test();
+
+    /* Both DNS queries fail. */
+    struct step test_dnsfail[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 10, 0, ENETUNREACH, -1},
+        {OP_REMOTES, DILL_IPADDR_IPV4, NULL, 10, 0, ENETUNREACH, -1},
+        {OP_END}
+    };
+    start_test(test_dnsfail, "DNS failure");
+    rc = dill_happyeyeballs_connect("www.example.org", 80, dill_now() + 2000);
+    assert(rc == -1 && errno == ENETUNREACH);
+    end_test();
+
+    /* Every connection attempt fails. */
+    struct step test_connfail[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 10, 0, 0, 1},
+        {OP_REMOTES, DILL_IPADDR_IPV4, NULL, 10, 0, 0, 1},
+        {OP_CONNECT, 0, "2001::1",     10, 0, ECONNREFUSED, -1},
+        {OP_CONNECT, 0, "192.168.0.1", 10, 0, ECONNREFUSED, -1},
+        {OP_END}
+    };
+    start_test(test_connfail, "connection failure");
+    rc = dill_happyeyeballs_connect("www.example.org", 80, dill_now() + 2000);
+    assert(rc == -1 && errno == ECONNREFUSED);
+    end_test();
+
+    /* A failed attempt is not a failure as long as another one may succeed,
+       be it launched later or still in progress. */
+    struct step test_laterconn[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 10, 0, 0, 1},
+        {OP_REMOTES, DILL_IPADDR_IPV4, NULL, 10, 0, 0, 1},
+        {OP_CONNECT, 0, "2001::1",     10, 0, ECONNREFUSED, -1},
+        {OP_CONNECT, 0, "192.168.0.1", 10, 0, 0, 5},
+        {OP_END}
+    };
+    start_test(test_laterconn, "failure, then success");
+    rc = dill_happyeyeballs_connect("www.example.org", 80, -1);
+    assert(rc == 5);
+    end_test();
+    struct step test_slowconn[] = {
+        {OP_REMOTES, DILL_IPADDR_IPV6, NULL, 10, 0, 0, 1},
+        {OP_REMOTES, DILL_IPADDR_IPV4, NULL, 10, 0, 0, 1},
+        {OP_CONNECT, 0, "2001::1",     800, 0, 0, 5},
+        {OP_CONNECT, 0, "192.168.0.1", 10,  0, ECONNREFUSED, -1},
+        {OP_END}
+    };
+    start_test(test_slowconn, "slow success after a failure");
+    rc = dill_happyeyeballs_connect("www.example.org", 80, -1);
+    assert(rc == 5);
+    end_test();
+
     /* IPv4 and IPv6 addresses should be alternated. Also check cancellation
        during connection attempt. */
     struct step test10[] = {

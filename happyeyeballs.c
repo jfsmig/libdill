@@ -29,11 +29,12 @@
 #include "utils.h"
 
 static dill_coroutine void dill_happyeyeballs_dnsquery(const char *name,
-      int port, int mode, int ch) {
+      int port, int mode, int ch, int *err) {
     /* Do the DNS query. Let's be reasonable and limit the number of addresses
        to 10 per IP version. */
     struct dill_ipaddr addrs[10];
     int count = dill_ipaddr_remotes(addrs, 10, name, port, mode, -1);
+    if(dill_slow(count < 0)) *err = errno;
     if(count > 0) {
         /* Send the results of the query to the main fuction. */
         int i;
@@ -54,9 +55,9 @@ static dill_coroutine void dill_happyeyeballs_dnsquery(const char *name,
 }
 
 static dill_coroutine void dill_happyeyeballs_attempt(struct dill_ipaddr addr,
-      int ch) {
+      int ch, int *err) {
     int conn = dill_tcp_connect(&addr, -1);
-    if(dill_slow(conn < 0)) return;
+    if(dill_slow(conn < 0)) {*err = errno; return;}
     int rc = dill_chsend(ch, &conn, sizeof(int), -1);
     if(dill_slow(rc < 0 && errno == ECANCELED)) {
         rc = dill_hclose(conn);
@@ -66,11 +67,23 @@ static dill_coroutine void dill_happyeyeballs_attempt(struct dill_ipaddr addr,
     dill_assert(rc == 0);
 }
 
+/* Tells dill_happyeyeballs_connect that there will be no connection. The error
+   travels as a negative number through the channel meant for the connection. */
+static void dill_happyeyeballs_fail(int ch, int err) {
+    dill_assert(err > 0);
+    int res = -err;
+    int rc = dill_chsend(ch, &res, sizeof(int), -1);
+    dill_assert(rc == 0 || errno == ECANCELED);
+}
+
 static dill_coroutine void dill_happyeyeballs_coordinator(
       const char *name, int port, int ch) {
     struct dill_ipaddr nulladdr;
     int rc = dill_ipaddr_local(&nulladdr, "0.0.0.0", 0, DILL_IPADDR_IPV4);
     dill_assert(rc == 0);
+    /* The error to report if no connection can be made: the cause of the most
+       recent failure. If nothing fails, the name has no address at all. */
+    int err = EADDRNOTAVAIL;
     /* According to the RFC, IPv4 and IPv6 DNS queries should be done in
        parallel. Create two coroutines and two channels to pass
        the addresses from them. */
@@ -86,11 +99,11 @@ static dill_coroutine void dill_happyeyeballs_coordinator(
     int bndl = dill_bundle_mem(&bndl_storage);
     dill_assert(bndl >= 0);
     rc = dill_bundle_go(bndl, dill_happyeyeballs_dnsquery(name, port,
-        DILL_IPADDR_IPV6, chipv6[1]));
+        DILL_IPADDR_IPV6, chipv6[1], &err));
     if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
     dill_assert(rc == 0);
     rc = dill_bundle_go(bndl, dill_happyeyeballs_dnsquery(name, port,
-        DILL_IPADDR_IPV4, chipv4[1]));
+        DILL_IPADDR_IPV4, chipv4[1], &err));
     if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
     dill_assert(rc == 0);
     /* RFC says to wait for 50ms for IPv6 result irrespective of whether
@@ -105,6 +118,7 @@ static dill_coroutine void dill_happyeyeballs_coordinator(
     if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
     int idx;
     int64_t nw;
+    int unresolved = 2;
     if(dill_fast(rc == 0)) {
         idx = 0;
         nw = dill_now();
@@ -118,10 +132,15 @@ static dill_coroutine void dill_happyeyeballs_coordinator(
         if(dill_slow(idx < 0 && errno == ECANCELED)) goto cancel;
         dill_assert(idx >= 0 && errno == 0);
 use_address:
-        /* Ignore 0.0.0.0 addresses. */
-        if(dill_ipaddr_equal(&addr, &nulladdr, 0)) continue;
+        /* A 0.0.0.0 address is not to be used. It marks the end of the results
+           of one of the two DNS queries. */
+        if(dill_ipaddr_equal(&addr, &nulladdr, 0)) {
+            unresolved--;
+            if(dill_slow(!unresolved)) break;
+            continue;
+        }
         /* Launch the connect attempt. */
-        rc = dill_bundle_go(bndl, dill_happyeyeballs_attempt(addr, ch));
+        rc = dill_bundle_go(bndl, dill_happyeyeballs_attempt(addr, ch, &err));
         if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
         dill_assert(rc == 0);
         /* Alternate between IPv4 and IPv6 addresses. */
@@ -135,6 +154,12 @@ use_address:
         if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
         dill_assert(rc == 0);
     }
+    /* No more addresses are going to come. If none of the attempts still in
+       progress succeeds, there is nothing left to try. */
+    rc = dill_bundle_wait(bndl, -1);
+    if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
+    dill_assert(rc == 0);
+    dill_happyeyeballs_fail(ch, err);
 cancel:
     rc = dill_hclose(bndl);
     dill_assert(rc == 0);
@@ -161,6 +186,7 @@ int dill_happyeyeballs_connect(const char *name, int port, int64_t deadline) {
     int conn;
     rc = dill_chrecv(chconns[0], &conn, sizeof(int), deadline);
     if(dill_slow(rc < 0)) {err = errno; goto exit3;}
+    if(dill_slow(conn < 0)) {err = -conn; goto exit3;}
     res = conn;
 exit3:
     rc = dill_hclose(coord);
