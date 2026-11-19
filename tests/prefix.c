@@ -133,6 +133,27 @@ int main(void) {
     rc = hclose(ls);
     errno_assert(rc == 0);
 
+    /* A message whose size does not fit into the header is rejected and
+       the socket remains usable. */
+    rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    s0 = prefix_attach(h[0], 1, 0);
+    errno_assert(s0 >= 0);
+    s1 = prefix_attach(h[1], 1, 0);
+    errno_assert(s1 >= 0);
+    char oversized[256] = {0};
+    rc = msend(s0, oversized, sizeof(oversized), -1);
+    errno_assert(rc == -1 && errno == EMSGSIZE);
+    rc = msend(s0, "ABC", 3, -1);
+    errno_assert(rc == 0);
+    sz = mrecv(s1, buf, sizeof(buf), -1);
+    errno_assert(sz == 3);
+    assert(memcmp(buf, "ABC", 3) == 0);
+    rc = hclose(s1);
+    errno_assert(rc == 0);
+    rc = hclose(s0);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
