@@ -177,7 +177,7 @@ int dill_http_recvrequest(int s, char *command, size_t commandlen,
     /* Protocol. */
     start = pos;
     while(obj->rxbuf[pos] != 0 && obj->rxbuf[pos] != ' ') ++pos;
-    if(dill_slow(pos - start != 8 &&
+    if(dill_slow(pos - start != 8 ||
           memcmp(obj->rxbuf + start, "HTTP/1.1", 8) != 0)) {
         errno = EPROTO; return -1;}
     while(obj->rxbuf[pos] == ' ') ++pos;
@@ -226,7 +226,7 @@ int dill_http_recvstatus(int s, char *reason, size_t reasonlen,
     size_t start = pos;
     while(obj->rxbuf[pos] != 0 && obj->rxbuf[pos] != ' ') ++pos;
     if(dill_slow(obj->rxbuf[pos] == 0)) {errno = EPROTO; return -1;}
-    if(dill_slow(pos - start != 8 &&
+    if(dill_slow(pos - start != 8 ||
           memcmp(obj->rxbuf + start, "HTTP/1.1", 8) != 0)) {
         errno = EPROTO; return -1;}
     while(obj->rxbuf[pos] == ' ') ++pos;

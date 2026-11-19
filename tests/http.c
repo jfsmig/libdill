@@ -25,6 +25,39 @@
 #include "assert.h"
 #include "../libdill.h"
 
+/* Only HTTP/1.1 is accepted. The peer is played by hand so that it can
+   announce other protocols, of the same length as "HTTP/1.1" or not. */
+static void reject_other_protocols(void) {
+    int h[2];
+    int rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    int s = http_attach(h[0]);
+    errno_assert(s >= 0);
+    char cmd[16];
+    char url[16];
+    rc = bsend(h[1], "GET / HTTP/1.0\r\n", 16, -1);
+    errno_assert(rc == 0);
+    rc = http_recvrequest(s, cmd, sizeof(cmd), url, sizeof(url), -1);
+    assert(rc == -1 && errno == EPROTO);
+    rc = bsend(h[1], "GET / HTTP/1.1x\r\n", 17, -1);
+    errno_assert(rc == 0);
+    rc = http_recvrequest(s, cmd, sizeof(cmd), url, sizeof(url), -1);
+    assert(rc == -1 && errno == EPROTO);
+    char reason[16];
+    rc = bsend(h[1], "HTTP/1.0 200 OK\r\n", 17, -1);
+    errno_assert(rc == 0);
+    rc = http_recvstatus(s, reason, sizeof(reason), -1);
+    assert(rc == -1 && errno == EPROTO);
+    rc = bsend(h[1], "HTTP/1.1x 200 OK\r\n", 18, -1);
+    errno_assert(rc == 0);
+    rc = http_recvstatus(s, reason, sizeof(reason), -1);
+    assert(rc == -1 && errno == EPROTO);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+}
+
 int main(void) {
     int h[2];
     int rc = ipc_pair(h);
@@ -42,6 +75,8 @@ int main(void) {
     errno_assert(rc == 0);
     assert(strcmp(cmd, "GET") == 0);
     assert(strcmp(url, "/a/b/c") == 0);
+
+    reject_other_protocols();
 
     /* Test fields. */
     char name[32];
