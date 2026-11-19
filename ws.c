@@ -404,6 +404,9 @@ static ssize_t dill_ws_recvmsg(struct dill_ws_sock *self, int *flags,
             if(flags) *flags = DILL_WS_BINARY;
             break;
         case 8:
+            /* The close frame may interrupt a fragmented message. The frames
+               received so far do not count towards its status and reason. */
+            res = 0;
             it.iol_base = &self->status;
             it.iol_len = 2;
             it.iol_next = &iol_msg;
