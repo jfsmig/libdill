@@ -132,6 +132,7 @@ int dill_pollset_in(struct dill_fdclause *fdcl, int id, int fd) {
         fdi->idx = ctx->pollset_size;
         ++ctx->pollset_size;
         ctx->pollset[fdi->idx].fd = fd;
+        ctx->pollset[fdi->idx].events = 0;
     }
     if(dill_slow(fdi->in)) {errno = EBUSY; return -1;}
     ctx->pollset[fdi->idx].events |= POLLIN;
@@ -155,6 +156,7 @@ int dill_pollset_out(struct dill_fdclause *fdcl, int id, int fd) {
         fdi->idx = ctx->pollset_size;
         ++ctx->pollset_size;
         ctx->pollset[fdi->idx].fd = fd;
+        ctx->pollset[fdi->idx].events = 0;
     }
     if(dill_slow(fdi->out)) {errno = EBUSY; return -1;}
     ctx->pollset[fdi->idx].events |= POLLOUT;
@@ -190,7 +192,10 @@ int dill_pollset_poll(int timeout) {
     int numevs = poll(ctx->pollset, ctx->pollset_size, timeout);
     if(numevs < 0 && errno == EINTR) return -1;
     dill_assert(numevs >= 0);
-    /* Fire file descriptor events as needed. */
+    /* Fire file descriptor events as needed. poll() also reports errors and
+       hang-ups on fds that nobody waits for any more, so numevs does not tell
+       whether a coroutine was resumed. */
+    int fired = 0;
     int i;
     for(i = 0; i != ctx->pollset_size; ++i) {
         struct pollfd *pfd = &ctx->pollset[i];
@@ -200,11 +205,13 @@ int dill_pollset_poll(int timeout) {
               pfd->revents & (POLLIN | POLLERR | POLLHUP | POLLNVAL)) {
             pfd->events &= ~POLLIN;
             dill_trigger(&fdi->in->cl, 0);
+            fired = 1;
         }
         if(fdi->out && 
               pfd->revents & (POLLOUT | POLLERR | POLLHUP | POLLNVAL)) {
             pfd->events &= ~POLLOUT;
             dill_trigger(&fdi->out->cl, 0);
+            fired = 1;
         }
         /* If nobody is polling for the fd remove it from the pollset. */
         if(!pfd->events) {
@@ -222,6 +229,6 @@ int dill_pollset_poll(int timeout) {
             --i;
         }
     }
-    return numevs > 0;
+    return fired;
 }
 
