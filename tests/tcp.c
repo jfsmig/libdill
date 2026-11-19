@@ -284,6 +284,7 @@ static void tcp_concurrency_test(void) {
 
 static void move_lots_of_data(size_t nbytes, size_t buffer_size);
 static void test_fromfd();
+static void test_close_releases_handle(void);
 
 int main(void) {
     char buf[16];
@@ -365,6 +366,8 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(cr);
     errno_assert(rc == 0);    
+
+    test_close_releases_handle();
 
     /* Emulate a DoS attack. */
     ls = tcp_listen(&addr, 10);
@@ -541,6 +544,45 @@ static void test_fromfd() {
     errno_assert(rc == 0);
     rc = hclose(as);
     errno_assert(rc == 0);
+    rc = hclose(ls);
+    errno_assert(rc == 0);
+}
+
+/* Whether tcp_close() succeeds or fails, the handle is gone afterwards. */
+static void test_close_releases_handle(void) {
+    struct ipaddr addr;
+    int rc = ipaddr_local(&addr, "127.0.0.1", 0, 0);
+    errno_assert(rc == 0);
+    int ls = tcp_listen(&addr, 10);
+    errno_assert(ls >= 0);
+    struct tcp_storage cmem;
+    struct tcp_storage amem;
+
+    /* The peer never closes its side, so the terminal handshake times out. */
+    int cs = tcp_connect_mem(&addr, &cmem, -1);
+    errno_assert(cs >= 0);
+    int as = tcp_accept_mem(ls, NULL, &amem, -1);
+    errno_assert(as >= 0);
+    rc = tcp_close(cs, 0);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+    rc = hclose(cs);
+    errno_assert(rc == -1 && errno == EBADF);
+    rc = hclose(as);
+    errno_assert(rc == 0);
+
+    cs = tcp_connect_mem(&addr, &cmem, -1);
+    errno_assert(cs >= 0);
+    as = tcp_accept_mem(ls, NULL, &amem, -1);
+    errno_assert(as >= 0);
+    rc = tcp_done(cs, -1);
+    errno_assert(rc == 0);
+    rc = tcp_close(as, -1);
+    errno_assert(rc == 0);
+    rc = hclose(as);
+    errno_assert(rc == -1 && errno == EBADF);
+    rc = hclose(cs);
+    errno_assert(rc == 0);
+
     rc = hclose(ls);
     errno_assert(rc == 0);
 }

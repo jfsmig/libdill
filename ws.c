@@ -557,14 +557,18 @@ int dill_ws_detach(int s, int status, const void *buf, size_t len,
         }
     }
     int u = self->u;
-    if(!self->mem) free(self);
+    self->u = -1;
+    int rc = dill_hclose(s);
+    dill_assert(rc == 0);
     return u;
 }
 
 static void dill_ws_hclose(struct dill_hvfs *hvfs) {
     struct dill_ws_sock *self = (struct dill_ws_sock*)hvfs;
-    int rc = dill_hclose(self->u);
-    dill_assert(rc == 0);
+    if(dill_fast(self->u >= 0)) {
+        int rc = dill_hclose(self->u);
+        dill_assert(rc == 0);
+    }
     if(!self->mem) free(self);
 }
 

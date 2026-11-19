@@ -186,6 +186,40 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(h[0]);
     errno_assert(rc == 0);
+
+    /* The detached socket is gone, only the underlying one remains. */
+    rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    s0 = http_attach_mem(h[0], &mem);
+    errno_assert(s0 >= 0);
+    s1 = http_attach(h[1]);
+    errno_assert(s1 >= 0);
+    rc = http_done(s1, -1);
+    errno_assert(rc == 0);
+    h[0] = http_detach(s0, -1);
+    errno_assert(h[0] >= 0);
+    rc = hclose(s0);
+    errno_assert(rc == -1 && errno == EBADF);
+    h[1] = http_detach(s1, -1);
+    errno_assert(h[1] >= 0);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+    rc = hclose(h[0]);
+    errno_assert(rc == 0);
+
+    /* Nothing remains when the detach fails: here the peer stays silent, so
+       the terminal handshake times out. */
+    rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    s0 = http_attach_mem(h[0], &mem);
+    errno_assert(s0 >= 0);
+    rc = http_detach(s0, 0);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+    rc = hclose(s0);
+    errno_assert(rc == -1 && errno == EBADF);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 

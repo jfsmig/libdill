@@ -181,6 +181,34 @@ int main(void) {
     rc = hclose(p[0]);
     errno_assert(rc == 0);
 
+    /* The detached socket is gone, only the underlying one remains. */
+    rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    int s0 = suffix_attach(p[0], "\r\n", 2);
+    errno_assert(s0 >= 0);
+    int s1 = suffix_attach(p[1], "\r\n", 2);
+    errno_assert(s1 >= 0);
+    struct term_storage mem0;
+    int t0 = term_attach_mem(s0, "STOP", 4, &mem0);
+    errno_assert(t0 >= 0);
+    struct term_storage mem1;
+    int t1 = term_attach_mem(s1, "STOP", 4, &mem1);
+    errno_assert(t1 >= 0);
+    rc = term_done(t0, -1);
+    errno_assert(rc == 0);
+    s1 = term_detach(t1, -1);
+    errno_assert(s1 >= 0);
+    rc = hclose(t1);
+    errno_assert(rc == -1 && errno == EBADF);
+    s0 = term_detach(t0, -1);
+    errno_assert(s0 >= 0);
+    rc = hclose(t0);
+    errno_assert(rc == -1 && errno == EBADF);
+    rc = hclose(s1);
+    errno_assert(rc == 0);
+    rc = hclose(s0);
+    errno_assert(rc == 0);
+
     return 0;
 }
 

@@ -117,7 +117,10 @@ int dill_http_detach(int s, int64_t deadline) {
     u = dill_suffix_detach(u, deadline);
     if(dill_slow(u < 0)) {err = errno; goto error;}
 error:
-    if(!obj->mem) free(obj);
+    /* The TERM socket underneath is gone by now, detached or closed. */
+    obj->u = -1;
+    int rc = dill_hclose(s);
+    dill_assert(rc == 0);
     errno = err;
     return u;
 }
