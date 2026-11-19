@@ -455,7 +455,9 @@ static long dill_tls_cbio_ctrl(BIO *bio, int cmd, long larg, void *parg) {
     case BIO_CTRL_POP:
         return 0;
     default:
-        dill_assert(0);
+        /* OpenSSL probes the BIO for optional features (kernel TLS since
+           3.0, for instance). Zero means that the command isn't supported. */
+        return 0;
     }
 }
 
