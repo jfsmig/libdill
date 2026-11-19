@@ -141,6 +141,7 @@ if(BUILD_TESTING)
         tests/iol.c
         tests/ipaddr.c
         tests/ipaddr2.c
+        tests/ipaddr_resolveropen.c
         tests/ipaddr_resolver.c
         tests/ipaddr_multiple.c
         tests/ipaddr_dnsrace.c
