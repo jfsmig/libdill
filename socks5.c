@@ -103,8 +103,10 @@ static int s5_client_auth(int s, const char *username, const char *password,
             // proxy accepted NO AUTH REQ'D, so we're done
             return 0;
         case S5METH_USERPASS:
-            dill_assert(!!username);
-            dill_assert(!!password);
+            // USER/PASS was offered only if we have both of them
+            if(dill_slow((!username) || (!password))) {
+                errno = EPROTO; return -1;
+            }
             // USER/PASS AUTH - per RFC 1929
             // max USER, PASS is 255 bytes (plus 3 bytes for VER, ULEN, PLEN)
             uint8_t upauth[513];
@@ -128,7 +130,7 @@ static int s5_client_auth(int s, const char *username, const char *password,
             errno = EACCES; return -1;
         default:
             // something is fishy as the proxy accepted something not requested
-            dill_assert(0);
+            errno = EPROTO; return -1;
     }
     return -1;
 }
