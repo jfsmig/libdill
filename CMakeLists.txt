@@ -140,6 +140,7 @@ if(BUILD_TESTING)
         tests/http.c
         tests/iol.c
         tests/ipaddr.c
+        tests/ipaddr2.c
         tests/ipc.c
         tests/overload.c
         tests/prefix.c
