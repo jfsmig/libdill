@@ -55,6 +55,29 @@ static struct dns_resolv_conf *dill_dns_conf = NULL;
 static struct dns_hosts *dill_dns_hosts = NULL;
 static struct dns_hints *dill_dns_hints = NULL;
 
+/* Loads the DNS configuration files and caches them for all the queries to
+   come. Nothing is cached unless all of them can be loaded. */
+static int dill_dns_loadconf(void) {
+    int err;
+    struct dns_resolv_conf *conf = dns_resconf_local(&err);
+    if(dill_slow(!conf)) goto error1;
+    struct dns_hosts *hosts = dns_hosts_local(&err);
+    if(dill_slow(!hosts)) goto error2;
+    struct dns_hints *hints = dns_hints_local(conf, &err);
+    if(dill_slow(!hints)) goto error3;
+    dill_dns_conf = conf;
+    dill_dns_hosts = hosts;
+    dill_dns_hints = hints;
+    return 0;
+error3:
+    dns_hosts_close(hosts);
+error2:
+    dns_resconf_close(conf);
+error1:
+    errno = err;
+    return -1;
+}
+
 static int dill_ipaddr_ipany(struct dill_ipaddr *addr, int port, int mode)
 {
     if(dill_slow(port < 0 || port > 0xffff)) {errno = EINVAL; return -1;}
@@ -320,15 +343,8 @@ int dill_ipaddr_remotes(struct dill_ipaddr *addrs, int naddrs,
        unless they are already chached. */
     if(dill_slow(!dill_dns_conf)) {
         /* TODO: Maybe re-read the configuration once in a while? */
-        dill_dns_conf = dns_resconf_local(&rc);
-        if(!dill_dns_conf) {
-            errno = ENOENT;
-            return -1;
-        }
-        dill_dns_hosts = dns_hosts_local(&rc);
-        dill_assert(dill_dns_hosts);
-        dill_dns_hints = dns_hints_local(dill_dns_conf, &rc);
-        dill_assert(dill_dns_hints);
+        rc = dill_dns_loadconf();
+        if(dill_slow(rc < 0)) return -1;
     }
     /* Launch the actual DNS query. */
     struct dns_resolver *resolver = dns_res_open(dill_dns_conf,
