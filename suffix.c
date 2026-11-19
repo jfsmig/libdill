@@ -161,16 +161,16 @@ static ssize_t dill_suffix_mrecvl(struct dill_msock_vfs *mvfs,
         /* Check for suffix. */
         if(memcmp(self->buf, self->suffix, self->suffixlen) == 0) break;
         /* Ignore empty iolist items. */
-        while(first->iol_len == 0) {
+        while(it.iol_len == 0) {
             if(!it.iol_next) {self->inerr = 1; errno = EMSGSIZE; return -1;}
             it = *it.iol_next;
         }
         /* Move one character to the user's iolist. */
-        if(it.iol_base && it.iol_len > 0) {
+        if(it.iol_base) {
             ((uint8_t*)it.iol_base)[0] = self->buf[0];
             it.iol_base = ((uint8_t*)it.iol_base) + 1;
-            it.iol_len--;
         }
+        it.iol_len--;
         /* Read new character into the temporary buffer. */
         memmove(self->buf, self->buf + 1, self->suffixlen - 1);
         rc = self->uvfs->brecvl(self->uvfs, &iol, &iol, deadline);
