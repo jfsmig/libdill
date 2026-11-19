@@ -105,6 +105,12 @@ int main(void) {
     rc = http_sendfield(s0, "invalid field name ", "bar", -1);
     assert(rc == -1 && errno == EINVAL);
 
+    /* A value with nothing but padding is as empty as an empty one. */
+    rc = http_sendfield(s0, "valid-field-name", "", -1);
+    assert(rc == -1 && errno == EPROTO);
+    rc = http_sendfield(s0, "valid-field-name", "   ", -1);
+    assert(rc == -1 && errno == EPROTO);
+
     rc = http_sendfield(s0, "valid-field-name", "  rpad", -1);
     errno_assert(rc == 0);
     rc = http_recvfield(s1, name, sizeof(name), value, sizeof(value), -1);
