@@ -27,6 +27,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include "assert.h"
@@ -141,6 +142,60 @@ static void send_two_fds(int s, int fd1, int fd2) {
     errno_assert(sz == 1);
 }
 
+/* Number of file descriptors open in this process. */
+static int count_fds(void) {
+    int count = 0;
+    int fd;
+    for(fd = 0; fd != 1024; ++fd) {
+        if(fcntl(fd, F_GETFD) != -1) ++count;
+    }
+    return count;
+}
+
+/* No handle can be created by a coroutine that is being canceled, so wrapping
+   a descriptor fails there. The descriptor is then left to the caller, and no
+   other one stays open behind. */
+coroutine void wrap_when_canceled(int fd, int listener) {
+    int rc = msleep(-1);
+    errno_assert(rc == -1 && errno == ECANCELED);
+    int nfds = count_fds();
+    int s = listener ? ipc_listener_fromfd(fd) : ipc_fromfd(fd);
+    errno_assert(s == -1 && errno == ECANCELED);
+    rc = close(fd);
+    errno_assert(rc == 0);
+    assert(count_fds() == nfds - 1);
+}
+
+static void test_fromfd_canceled(void) {
+    int sp[2];
+    int rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sp);
+    errno_assert(rc == 0);
+    int cr = go(wrap_when_canceled(sp[0], 0));
+    errno_assert(cr >= 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+    rc = close(sp[1]);
+    errno_assert(rc == 0);
+
+    struct stat st;
+    rc = stat(TESTADDR, &st);
+    if(rc == 0) errno_assert(unlink(TESTADDR) == 0);
+    struct sockaddr_un su;
+    memset(&su, 0, sizeof(su));
+    su.sun_family = AF_UNIX;
+    strcpy(su.sun_path, TESTADDR);
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    errno_assert(fd >= 0);
+    rc = bind(fd, (struct sockaddr*)&su, sizeof(su));
+    errno_assert(rc == 0);
+    rc = listen(fd, 10);
+    errno_assert(rc == 0);
+    cr = go(wrap_when_canceled(fd, 1));
+    errno_assert(cr >= 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+}
+
 int main() {
     char buf[16];
 
@@ -246,6 +301,8 @@ int main() {
     errno_assert(rc == 0);
     rc = hclose(s[1]);
     errno_assert(rc == 0);
+
+    test_fromfd_canceled();
 
     /* Try skipping some data. */
     rc = ipc_pair(s);

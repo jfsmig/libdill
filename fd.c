@@ -403,13 +403,6 @@ void dill_fd_close(int s) {
     close(s);
 }
 
-int dill_fd_own(int s) {
-    int n = dup(s);
-    if(dill_slow(n < 0)) return -1;
-    dill_fd_close(s);
-    return n;
-}
-
 int dill_fd_check(int s, int type, int family1, int family2, int listening) {
     /* Check type. E.g. SOCK_STREAM vs. SOCK_DGRAM. */
     int val;
