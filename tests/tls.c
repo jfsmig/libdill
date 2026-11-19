@@ -27,7 +27,7 @@
 #include <unistd.h>
 
 #include "assert.h"
-#include "../libdill.h"
+#include "../libdillimpl.h"
 
 #if defined DILL_THREADS
 
@@ -236,6 +236,20 @@ coroutine void canceled_attach(int u, int server, int cancel_first) {
         tls_attach_server(u, "tests/cert.pem", "tests/key.pem", -1) :
         tls_attach_client(u, -1);
     errno_assert(s == -1 && errno == ECANCELED);
+}
+
+coroutine void client4(int u) {
+    int s = tls_attach_client(u, -1);
+    errno_assert(s >= 0);
+    uint8_t b[2000];
+    int i;
+    for(i = 0; i != sizeof(b); ++i) b[i] = (uint8_t)i;
+    int rc = bsend(s, b, sizeof(b), -1);
+    errno_assert(rc == 0);
+    u = tls_detach(s, -1);
+    errno_assert(u >= 0);
+    rc = hclose(u);
+    errno_assert(rc == 0);
 }
 
 int main(void) {
@@ -456,6 +470,36 @@ int main(void) {
     errno_assert(s == -1 && errno == ETIMEDOUT);
     time_assert(now() - start, 50);
     rc = hclose(u[1]);
+    errno_assert(rc == 0);
+
+    /* Skip a part of the data, then receive nothing, then the rest. */
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    cr = go(client4(u[1]));
+    errno_assert(cr >= 0);
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    rc = brecv(s, NULL, 1000, -1);
+    errno_assert(rc == 0);
+    rc = brecv(s, buf, 0, -1);
+    errno_assert(rc == 0);
+    /* Dropping everything until the end of the stream, which is what tcp
+       and ipc sockets do without an iolist, is not supported. */
+    struct bsock_vfs *b = hquery(s, bsock_type);
+    errno_assert(b);
+    rc = b->brecvl(b, NULL, NULL, -1);
+    errno_assert(rc == -1 && errno == EINVAL);
+    uint8_t rest[1000];
+    rc = brecv(s, rest, sizeof(rest), -1);
+    errno_assert(rc == 0);
+    for(i = 0; i != sizeof(rest); ++i) assert(rest[i] == (uint8_t)(1000 + i));
+    u[0] = tls_detach(s, -1);
+    errno_assert(u[0] >= 0);
+    rc = hclose(u[0]);
+    errno_assert(rc == 0);
+    rc = bundle_wait(cr, -1);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
     errno_assert(rc == 0);
 
     return 0;
