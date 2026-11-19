@@ -119,17 +119,14 @@ static dill_coroutine void dill_happyeyeballs_coordinator(
         dill_now() + 50);
     if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
     int idx;
-    int64_t nw;
     int unresolved = 2;
     if(dill_fast(rc == 0)) {
         idx = 0;
-        nw = dill_now();
         goto use_address;
     }
     dill_assert(errno == ETIMEDOUT);
     /* From now we can use any address. */
     while(1) {
-        nw = dill_now();
         idx = dill_choose(cls, 2, -1);
         if(dill_slow(idx < 0 && errno == ECANCELED)) goto cancel;
         dill_assert(idx >= 0 && errno == 0);
@@ -151,7 +148,7 @@ use_address:
             cls[1].ch = tmp;
         }
         /* Wait for 300ms before launching next connection attempt. */
-        rc = dill_msleep(nw + 300);
+        rc = dill_msleep(dill_now() + 300);
         if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
         dill_assert(rc == 0);
     }
