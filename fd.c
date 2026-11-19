@@ -247,6 +247,14 @@ static int dill_fd_recv_(int s, struct dill_iolist *first,
     }
 }
 
+/* dill_fdin() times out only when there is nothing to read, so a peer that
+   keeps sending never makes it fail. A loop that reads an unlimited amount
+   of data has to watch the deadline by itself. A zero deadline is left to
+   dill_fdin(): it asks for whatever can be done without waiting. */
+static int dill_fd_expired(int64_t deadline) {
+    return deadline > 0 && dill_now() >= deadline;
+}
+
 /* Skip len bytes. If len is negative skip until error occurs. */
 static int dill_fd_skip(int s, ssize_t len, int64_t deadline) {
     uint8_t buf[512];
@@ -256,6 +264,8 @@ static int dill_fd_skip(int s, ssize_t len, int64_t deadline) {
         int rc = dill_fd_recv_(s, &iol, &iol, deadline);
         if(dill_slow(rc < 0)) return -1;
         if(len >= 0) len -= to_recv;
+        else if(dill_slow(dill_fd_expired(deadline))) {
+            errno = ETIMEDOUT; return -1;}
     }
     return 0;
 }
