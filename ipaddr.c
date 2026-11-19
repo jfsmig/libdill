@@ -377,12 +377,7 @@ int dill_ipaddr_remotes(struct dill_ipaddr *addrs, int naddrs,
     /* Launch the actual DNS query. */
     struct dns_resolver *resolver = dns_res_open(dill_dns_conf,
         dill_dns_hosts, dill_dns_hints, NULL, dns_opts(), &rc);
-    if(!resolver) {
-        if(errno == ENFILE || errno == EMFILE) {
-            return -1;
-        }
-        dill_assert(resolver);
-    }
+    if(dill_slow(!resolver)) {errno = rc; return -1;}
     dill_assert(port >= 0 && port <= 0xffff);
     char portstr[8];
     snprintf(portstr, sizeof(portstr), "%d", port);

@@ -1,0 +1,120 @@
+/*
+
+  Copyright (c) 2026 Jean-Francois Smigielski
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"),
+  to deal in the Software without restriction, including without limitation
+  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+  and/or sell copies of the Software, and to permit persons to whom
+  the Software is furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+  IN THE SOFTWARE.
+
+*/
+
+/* Tests of ipaddr.c in situations that depend on the system it runs on.
+   ipaddr.c is compiled into this program with the system facilities it relies
+   on replaced by mocks, so that each test decides what the system does. */
+
+#define dns_resconf_local mock_resconf_local
+#define dns_hosts_local mock_hosts_local
+#define dns_hints_local mock_hints_local
+#define dns_res_open mock_res_open
+#define dns_res_close mock_res_close
+#define dns_ai_open mock_ai_open
+#define dns_ai_nextent mock_ai_nextent
+#define dns_ai_pollfd mock_ai_pollfd
+#define dns_ai_events mock_ai_events
+#define dns_ai_close mock_ai_close
+
+#include "../ipaddr.c"
+#include "assert.h"
+
+/* ipaddr.c never looks into the objects of the DNS resolver, so the mocks
+   hand out pointers to this one. */
+static int mock_object;
+
+struct dns_resolv_conf *mock_resconf_local(int *error) {
+    return (struct dns_resolv_conf*)&mock_object;
+}
+
+struct dns_hosts *mock_hosts_local(int *error) {
+    return (struct dns_hosts*)&mock_object;
+}
+
+struct dns_hints *mock_hints_local(struct dns_resolv_conf *conf, int *error) {
+    return (struct dns_hints*)&mock_object;
+}
+
+/* The error that dns_res_open() fails with. Zero makes it succeed. */
+static int res_open_error = 0;
+
+struct dns_resolver *mock_res_open(struct dns_resolv_conf *conf,
+      struct dns_hosts *hosts, struct dns_hints *hints, struct dns_cache *cache,
+      const struct dns_options *opts, int *error) {
+    if(res_open_error) {
+        *error = res_open_error;
+        return NULL;
+    }
+    return (struct dns_resolver*)&mock_object;
+}
+
+void mock_res_close(struct dns_resolver *resolver) {
+}
+
+struct dns_addrinfo *mock_ai_open(const char *host, const char *serv,
+      enum dns_type qtype, const struct addrinfo *hints,
+      struct dns_resolver *resolver, int *error) {
+    return (struct dns_addrinfo*)&mock_object;
+}
+
+void mock_ai_close(struct dns_addrinfo *ai) {
+}
+
+/* No name has any address. */
+int mock_ai_nextent(struct addrinfo **ent, struct dns_addrinfo *ai) {
+    *ent = NULL;
+    return ENOENT;
+}
+
+int mock_ai_pollfd(struct dns_addrinfo *ai) {
+    return -1;
+}
+
+int mock_ai_events(struct dns_addrinfo *ai) {
+    return 0;
+}
+
+int main(void) {
+    struct dill_ipaddr addr;
+
+    /* The resolver cannot be created. Whatever the reason, it is an error,
+       reported with the code that the DNS library returned. */
+    res_open_error = ENOBUFS;
+    int rc = dill_ipaddr_remotes(&addr, 1, "www.example.org", 80,
+        DILL_IPADDR_IPV4, -1);
+    assert(rc == -1 && errno == ENOBUFS);
+    res_open_error = EMFILE;
+    rc = dill_ipaddr_remotes(&addr, 1, "www.example.org", 80,
+        DILL_IPADDR_IPV4, -1);
+    assert(rc == -1 && errno == EMFILE);
+
+    /* The failure is not a permanent one. */
+    res_open_error = 0;
+    rc = dill_ipaddr_remotes(&addr, 1, "www.example.org", 80,
+        DILL_IPADDR_IPV4, -1);
+    errno_assert(rc == 0);
+
+    return 0;
+}
+
