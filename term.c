@@ -157,6 +157,7 @@ error:;
 static int dill_term_msendl(struct dill_msock_vfs *mvfs,
       struct dill_iolist *first, struct dill_iolist *last, int64_t deadline) {
     struct dill_term_sock *self = dill_cont(mvfs, struct dill_term_sock, mvfs);
+    if(dill_slow(self->outdone)) {errno = EPIPE; return -1;}
     /* TODO: Check that it's not the terminal message. */
     return dill_msendl(self->u, first, last, deadline);
 }
