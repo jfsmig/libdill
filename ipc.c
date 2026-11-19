@@ -596,6 +596,7 @@ int dill_ipc_pair(int s[2]) {
     return 0;
 error6:
     rc = dill_hclose(s[0]);
+    free(conn1);
     goto error2;
 error5:
     free(conn1);
