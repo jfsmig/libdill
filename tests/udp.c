@@ -25,6 +25,37 @@
 #include "assert.h"
 #include "../libdill.h"
 
+coroutine void blocked_receiver(int s) {
+    char buf[16];
+    ssize_t sz = udp_recv(s, NULL, buf, sizeof(buf), -1);
+    errno_assert(sz == -1 && errno == ECANCELED);
+}
+
+/* A coroutine waiting for a packet must not keep other coroutines from
+   sending on the same socket. */
+static void send_while_receiving(void) {
+    struct ipaddr addr;
+    int rc = ipaddr_local(&addr, "127.0.0.1", 0, 0);
+    errno_assert(rc == 0);
+    int s = udp_open(&addr, NULL);
+    errno_assert(s >= 0);
+    struct ipaddr peer_addr;
+    rc = ipaddr_local(&peer_addr, "127.0.0.1", 0, 0);
+    errno_assert(rc == 0);
+    int peer = udp_open(&peer_addr, NULL);
+    errno_assert(peer >= 0);
+    int cr = go(blocked_receiver(s));
+    errno_assert(cr >= 0);
+    rc = udp_send(s, &peer_addr, "ABC", 3);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+    rc = hclose(peer);
+    errno_assert(rc == 0);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+}
+
 int main(void) {
     struct ipaddr addr1;
     int rc = ipaddr_local(&addr1, "127.0.0.1", 5555, 0);
@@ -76,6 +107,8 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(s1);
     errno_assert(rc == 0);
+
+    send_while_receiving();
 
     return 0;
 }
