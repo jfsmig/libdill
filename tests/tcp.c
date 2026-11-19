@@ -102,6 +102,32 @@ coroutine void client4(int port) {
     errno_assert(rc == -1 && errno == ETIMEDOUT);
 }
 
+/* shutdown() fails for reasons that depend on the system and that cannot be
+   provoked at will. To see such a failure reported, the socket is replaced by
+   a file behind the library's back. */
+static void test_done_failure(void) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    errno_assert(fd >= 0);
+    /* tcp_fromfd() keeps a duplicate of the descriptor. A duplicate gets the
+       lowest free number, so that number can be found out in advance. */
+    int dupfd = dup(fd);
+    errno_assert(dupfd >= 0);
+    int rc = close(dupfd);
+    errno_assert(rc == 0);
+    int s = tcp_fromfd(fd);
+    errno_assert(s >= 0);
+    int file = open("/dev/null", O_RDWR);
+    errno_assert(file >= 0);
+    rc = dup2(file, dupfd);
+    errno_assert(rc == dupfd);
+    rc = close(file);
+    errno_assert(rc == 0);
+    rc = tcp_done(s, -1);
+    errno_assert(rc == -1 && errno == ENOTSOCK);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+}
+
 coroutine void tcp_forward(int s1, int s2, int ch) {
     uint8_t c;
     while (1) {
@@ -323,6 +349,8 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(cr);
     errno_assert(rc == 0);
+
+    test_done_failure();
 
     /* Test simple data exchange. */
     ls = tcp_listen(&addr, 10);
