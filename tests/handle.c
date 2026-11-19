@@ -40,6 +40,29 @@ static void test_close(struct hvfs *vfs) {
     status = 2;
 }
 
+/* More handles than the handle table initially has room for. */
+#define MANY_HANDLES 256
+
+coroutine void canceled(void) {
+    int rc = msleep(-1);
+    errno_assert(rc == -1 && errno == ECANCELED);
+}
+
+coroutine void grow_handle_table(struct hvfs *vfs) {
+    int rc = yield();
+    errno_assert(rc == 0);
+    int hndls[MANY_HANDLES];
+    int i;
+    for(i = 0; i != MANY_HANDLES; ++i) {
+        hndls[i] = hmake(vfs);
+        errno_assert(hndls[i] >= 0);
+    }
+    for(i = 0; i != MANY_HANDLES; ++i) {
+        rc = hclose(hndls[i]);
+        errno_assert(rc == 0);
+    }
+}
+
 int main(void) {
 
     struct test t;
@@ -54,6 +77,27 @@ int main(void) {
     int rc = hclose(h);
     errno_assert(rc == 0);
     assert(status == 2);
+
+    /* Test closing a handle while another coroutine makes the handle table
+       grow: hclose() of a bundle lets grow_handle_table() run. The table is
+       still the last block on the heap here; allocating right after it keeps
+       realloc() from growing it in place. */
+    void *pin = malloc(1);
+    assert(pin);
+    struct bundle_storage mem;
+    int b = bundle_mem(&mem);
+    errno_assert(b >= 0);
+    rc = bundle_go(b, canceled());
+    errno_assert(rc == 0);
+    int grower = go(grow_handle_table(&t.vfs));
+    errno_assert(grower >= 0);
+    rc = hclose(b);
+    errno_assert(rc == 0);
+    p = hquery(b, NULL);
+    errno_assert(p == NULL && errno == EBADF);
+    rc = hclose(grower);
+    errno_assert(rc == 0);
+    free(pin);
 
     int ch[2];
     rc = chmake(ch);

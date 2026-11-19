@@ -155,6 +155,9 @@ int dill_hclose(int h) {
     hndl->vfs->close(hndl->vfs);
     /* Restore the previous state. */
     dill_no_blocking(old);
+    /* Closing a bundle runs other coroutines. In case one of them made
+       the handle array reallocate we have to recompute the pointer. */
+    hndl = &ctx->handles[h];
     /* Mark the cache as invalid. */
     hndl->ptr = NULL;
     /* Return a handle to the shared pool. */
