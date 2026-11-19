@@ -23,6 +23,7 @@
 */
 #include <libdill.h>
 
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -219,6 +220,48 @@ coroutine void recv10k(int s) {
     return;
 }
 
+/* Number of file descriptors open in this process. */
+static int count_fds(void) {
+    int count = 0;
+    int fd;
+    for(fd = 0; fd != 1024; ++fd) {
+        if(fcntl(fd, F_GETFD) != -1) ++count;
+    }
+    return count;
+}
+
+/* No handle can be created by a coroutine that is being canceled, so wrapping
+   a descriptor fails there. The descriptor is then left to the caller, and no
+   other one stays open behind. */
+static coroutine void wrap_when_canceled(int fd, int listener) {
+    int rc = msleep(-1);
+    errno_assert(rc == -1 && errno == ECANCELED);
+    int nfds = count_fds();
+    int s = listener ? tcp_listener_fromfd(fd) : tcp_fromfd(fd);
+    errno_assert(s == -1 && errno == ECANCELED);
+    rc = close(fd);
+    errno_assert(rc == 0);
+    assert(count_fds() == nfds - 1);
+}
+
+static void test_fromfd_canceled(void) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    errno_assert(fd >= 0);
+    int cr = go(wrap_when_canceled(fd, 0));
+    errno_assert(cr >= 0);
+    int rc = hclose(cr);
+    errno_assert(rc == 0);
+
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    errno_assert(fd >= 0);
+    rc = listen(fd, 10);
+    errno_assert(rc == 0);
+    cr = go(wrap_when_canceled(fd, 1));
+    errno_assert(cr >= 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+}
+
 static void tcp_concurrency_test(void) {
     int b1 = bundle();
     errno_assert(b1 >= 0);
@@ -300,6 +343,8 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(cr);
     errno_assert(rc == 0);
+
+    test_fromfd_canceled();
 
     /* Manual termination handshake. */
     ls = tcp_listen(&addr, 10);
