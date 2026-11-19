@@ -54,6 +54,30 @@ void client_sayhello(int s) {
     return;
 }
 
+// An empty host name can't be put into a CONNECT request. The client must
+// refuse it and send nothing past the method negotiation.
+static void client_rejects_empty_hostname(void) {
+    int h[2];
+    int rc = ipc_pair(h);
+    errno_assert(rc == 0);
+    // let the client pass the method negotiation
+    uint8_t selection[] = {0x05, 0x00};
+    rc = bsend(h[0], selection, sizeof(selection), -1);
+    errno_assert(rc == 0);
+    rc = socks5_client_connectbyname(h[1], NULL, NULL, "", 5555, now() + 100);
+    errno_assert(rc == -1 && errno == EINVAL);
+    rc = hclose(h[1]);
+    errno_assert(rc == 0);
+    uint8_t methods[3];
+    rc = brecv(h[0], methods, sizeof(methods), now() + 1000);
+    errno_assert(rc == 0);
+    uint8_t request;
+    rc = brecv(h[0], &request, 1, now() + 1000);
+    errno_assert(rc == -1 && errno == EPIPE);
+    rc = hclose(h[0]);
+    errno_assert(rc == 0);
+}
+
 coroutine void clientbyaddr(int s, char *user, char* pass) {
     struct ipaddr addr;
     int rc = ipaddr_remote(&addr, "127.0.0.1", 5555, 0, -1);
@@ -232,6 +256,7 @@ int main(void) {
     // username/password, then GSSAPI, which libdill never offers
     client_rejects_unoffered_method(0x02);
     client_rejects_unoffered_method(0x01);
+    client_rejects_empty_hostname();
 
     return 0;
 }
