@@ -98,7 +98,7 @@ int dill_tls_attach_client_mem(int s, struct dill_tls_storage *mem,
 	  SSL_set_bio(ssl, bio, bio);
     /* Take ownership of the underlying socket. */
     s = dill_hown(s);
-    if(dill_slow(s < 0)) {err = errno; goto error1;}
+    if(dill_slow(s < 0)) {err = errno; goto error3;}
     /* Create the object. */
     struct dill_tls_sock *self = (struct dill_tls_sock*)mem;
     self->hvfs.query = dill_tls_hquery;
@@ -121,14 +121,12 @@ int dill_tls_attach_client_mem(int s, struct dill_tls_storage *mem,
         ERR_clear_error();
         int rc = SSL_connect(ssl);
         if(dill_tls_followup(self, rc)) break;
-        if(dill_slow(errno != 0)) {err = errno; goto error4;}
+        if(dill_slow(errno != 0)) {err = errno; goto error3;}
     }
     /* Create the handle. */
     int h = dill_hmake(&self->hvfs);
-    if(dill_slow(h < 0)) {err = errno; goto error4;}
+    if(dill_slow(h < 0)) {err = errno; goto error3;}
     return h;
-error4:
-    BIO_vfree(bio);
 error3:
     SSL_free(ssl);
 error2:
@@ -186,7 +184,7 @@ int dill_tls_attach_server_mem(int s, const char *cert, const char *pkey,
 	  SSL_set_bio(ssl, bio, bio);
     /* Take ownership of the underlying socket. */
     s = dill_hown(s);
-    if(dill_slow(s < 0)) {err = errno; goto error1;}
+    if(dill_slow(s < 0)) {err = errno; goto error3;}
     /* Create the object. */
     struct dill_tls_sock *self = (struct dill_tls_sock*)mem;
     self->hvfs.query = dill_tls_hquery;
@@ -209,14 +207,12 @@ int dill_tls_attach_server_mem(int s, const char *cert, const char *pkey,
         ERR_clear_error();
         rc = SSL_accept(ssl);
         if(dill_tls_followup(self, rc)) break;
-        if(dill_slow(errno != 0)) {err = errno; goto error4;}
+        if(dill_slow(errno != 0)) {err = errno; goto error3;}
     }
     /* Create the handle. */
     int h = dill_hmake(&self->hvfs);
-    if(dill_slow(h < 0)) {err = errno; goto error4;}
+    if(dill_slow(h < 0)) {err = errno; goto error3;}
     return h;
-error4:
-    BIO_vfree(bio);
 error3:
     SSL_free(ssl);
 error2:

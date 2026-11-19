@@ -178,6 +178,17 @@ coroutine void client3(int u) {
     errno_assert(rc == 0);
 }
 
+coroutine void canceled_attach(int u, int server, int cancel_first) {
+    if(cancel_first) {
+        int rc = msleep(-1);
+        errno_assert(rc == -1 && errno == ECANCELED);
+    }
+    int s = server ?
+        tls_attach_server(u, "tests/cert.pem", "tests/key.pem", -1) :
+        tls_attach_client(u, -1);
+    errno_assert(s == -1 && errno == ECANCELED);
+}
+
 int main(void) {
     char buf[16];
 
@@ -304,6 +315,20 @@ int main(void) {
     rc = hclose(cr);
     errno_assert(rc == 0);
 
+    /* Cancel the attach, either while it's blocked in the handshake with
+       a silent peer or before it starts. It has to release everything. */
+    int i;
+    for(i = 0; i != 4; ++i) {
+        rc = ipc_pair(u);
+        errno_assert(rc == 0);
+        cr = go(canceled_attach(u[1], i & 1, i & 2));
+        errno_assert(cr >= 0);
+        rc = hclose(cr);
+        errno_assert(rc == 0);
+        rc = hclose(u[0]);
+        errno_assert(rc == 0);
+    }
+
     /* Transfer large amount of data. */
     rc = ipc_pair(u);
     errno_assert(rc == 0);
@@ -312,7 +337,6 @@ int main(void) {
     s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
     errno_assert(s >= 0);
     uint8_t c = 0;
-    int i;
     for(i = 0; i != 2777; ++i) {
         uint8_t b[257];
         rc = brecv(s, b, sizeof(b), -1);
