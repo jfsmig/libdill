@@ -1,0 +1,138 @@
+version: 2.1
+
+# Same build matrix as .github/workflows/ci.yml. CircleCI has no Intel macOS
+# executors, so the macOS configurations run on Apple silicon only.
+
+commands:
+  build-and-test:
+    parameters:
+      configure: { type: string, default: "" }
+      cflags: { type: string, default: "" }
+      dist: { type: boolean, default: false }
+    steps:
+      - run:
+          name: Configure
+          command: |
+            ./autogen.sh
+            ./configure << parameters.configure >> CFLAGS="-O3 << parameters.cflags >> -DDILL_SLOW_TESTS"
+      - when:
+          condition: << parameters.dist >>
+          steps:
+            - run: { name: Build source package, command: make V=1 dist }
+      - unless:
+          condition: << parameters.dist >>
+          steps:
+            - run: { name: Build, command: make V=1 }
+            - run: { name: Test, command: make check }
+      - run:
+          name: Show test logs
+          when: on_fail
+          command: |
+            for f in tests/*.log test-suite.log; do
+              [ -f "$f" ] || continue
+              echo; echo "${f}:"; cat "$f"
+            done
+
+jobs:
+  linux:
+    parameters:
+      cc: { type: string, default: gcc }
+      packages: { type: string, default: "" }
+      configure: { type: string, default: "" }
+      cflags: { type: string, default: "" }
+      dist: { type: boolean, default: false }
+      resource_class: { type: string, default: medium }
+    docker:
+      - image: cimg/base:current-24.04
+    resource_class: << parameters.resource_class >>
+    environment:
+      CC: << parameters.cc >>
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y autoconf automake libtool pkg-config << parameters.packages >>
+      - build-and-test:
+          configure: << parameters.configure >>
+          cflags: << parameters.cflags >>
+          dist: << parameters.dist >>
+
+  # macOS resources are scarce: instead of one job per configuration, a single
+  # job builds and tests every configuration in turn, each in its own copy of
+  # the tree.
+  macos:
+    macos:
+      xcode: "27.1"
+    resource_class: m4pro.medium
+    environment:
+      CC: clang
+      HOMEBREW_NO_AUTO_UPDATE: 1
+    steps:
+      - checkout
+      # Homebrew installs libtoolize as glibtoolize, and keg-only OpenSSL
+      # outside the default pkg-config search path.
+      - run:
+          name: Install dependencies
+          command: |
+            brew install autoconf automake libtool pkgconf openssl@3
+            echo "export PATH=\"$(brew --prefix libtool)/libexec/gnubin:\$PATH\"" >> "$BASH_ENV"
+            echo "export PKG_CONFIG_PATH=\"$(brew --prefix openssl@3)/lib/pkgconfig\"" >> "$BASH_ENV"
+      - run: { name: Generate the build system, command: ./autogen.sh }
+      - run:
+          name: Build and test each configuration
+          command: |
+            failed=
+            mkdir -p "$HOME/builds"
+            for config in "clang:" \
+                          "static:--disable-shared" \
+                          "nothreads:--disable-threads" \
+                          "static-nothreads:--disable-shared --disable-threads" \
+                          "tls:--enable-tls"; do
+              name=${config%%:*}
+              dir=$HOME/builds/$name
+              cp -R . "$dir"
+              echo "=== $name"
+              (cd "$dir" &&
+               ./configure ${config#*:} CFLAGS="-O3 -DDILL_SLOW_TESTS" &&
+               make V=1 &&
+               make check) && status=0 || status=1
+              if [ $status != 0 ]; then
+                failed="$failed $name"
+                for f in "$dir"/tests/*.log "$dir"/test-suite.log; do
+                  [ -f "$f" ] || continue
+                  echo; echo "$name: ${f#"$dir"/}:"; cat "$f"
+                done
+              fi
+            done
+            if [ -n "$failed" ]; then
+              echo "Failed configurations:$failed"
+              exit 1
+            fi
+
+workflows:
+  ci:
+    when:
+      not:
+        equal: [ gh-pages, << pipeline.git.branch >> ]
+    jobs:
+      - linux: { name: linux-gcc }
+      - linux: { name: linux-clang, cc: clang, packages: clang }
+      - linux: { name: linux-gcc-static, configure: --disable-shared }
+      - linux: { name: linux-clang-static, cc: clang, packages: clang, configure: --disable-shared }
+      - linux: { name: linux-gcc-poll, cflags: -DDILL_POLL }
+      - linux: { name: linux-gcc-nothreads, configure: --disable-threads }
+      - linux: { name: linux-gcc-census, configure: --enable-census }
+      - linux: { name: linux-gcc-valgrind, packages: valgrind, configure: --enable-valgrind }
+      - linux: { name: linux-gcc-static-valgrind, packages: valgrind, configure: --disable-shared --enable-valgrind }
+      - linux: { name: linux-gcc-valgrind-nothreads, packages: valgrind, configure: --enable-valgrind --disable-threads }
+      - linux: { name: linux-gcc-poll-nothreads, configure: --disable-threads, cflags: -DDILL_POLL }
+      - linux: { name: linux-gcc-static-nothreads, configure: --disable-shared --disable-threads }
+      - linux: { name: linux-gcc-arch-fallback, cflags: -DDILL_ARCH_FALLBACK }
+      - linux: { name: linux-clang-arch-fallback, cc: clang, packages: clang, cflags: -DDILL_ARCH_FALLBACK }
+      - linux: { name: linux-gcc-thread-fallback, cflags: -DDILL_THREAD_FALLBACK }
+      - linux: { name: linux-gcc-tls, packages: libssl-dev, configure: --enable-tls }
+      - linux: { name: linux-gcc-dist, dist: true }
+      - linux: { name: linux-arm64-gcc, resource_class: arm.medium }
+      - macos: { name: macos-arm64 }
