@@ -82,30 +82,32 @@ static dill_coroutine void dill_happyeyeballs_coordinator(
     int rc = dill_ipaddr_local(&nulladdr, "0.0.0.0", 0, DILL_IPADDR_IPV4);
     dill_assert(rc == 0);
     /* The error to report if no connection can be made: the cause of the most
-       recent failure. If nothing fails, the name has no address at all. */
-    int err = EADDRNOTAVAIL;
+       recent failure of a DNS query or a connection attempt. If nothing
+       fails, the name has no address at all. It is kept apart from err, the
+       error of the coordinator itself, because the coroutines that are
+       canceled while the coordinator cleans up record ECANCELED in it. */
+    int lasterr = EADDRNOTAVAIL;
+    int err;
     /* According to the RFC, IPv4 and IPv6 DNS queries should be done in
        parallel. Create two coroutines and two channels to pass
        the addresses from them. */
     int chipv6[2];
     struct dill_chstorage chipv6_storage;
     rc = dill_chmake_mem(&chipv6_storage, chipv6);
-    dill_assert(rc == 0);
+    if(dill_slow(rc < 0)) {err = errno; goto error1;}
     int chipv4[2];
     struct dill_chstorage chipv4_storage;
     rc = dill_chmake_mem(&chipv4_storage, chipv4);
-    dill_assert(rc == 0);
+    if(dill_slow(rc < 0)) {err = errno; goto error2;}
     struct dill_bundle_storage bndl_storage;
     int bndl = dill_bundle_mem(&bndl_storage);
-    dill_assert(bndl >= 0);
+    if(dill_slow(bndl < 0)) {err = errno; goto error3;}
     rc = dill_bundle_go(bndl, dill_happyeyeballs_dnsquery(name, port,
-        DILL_IPADDR_IPV6, chipv6[1], &err));
-    if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
-    dill_assert(rc == 0);
+        DILL_IPADDR_IPV6, chipv6[1], &lasterr));
+    if(dill_slow(rc < 0)) {err = errno; goto error4;}
     rc = dill_bundle_go(bndl, dill_happyeyeballs_dnsquery(name, port,
-        DILL_IPADDR_IPV4, chipv4[1], &err));
-    if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
-    dill_assert(rc == 0);
+        DILL_IPADDR_IPV4, chipv4[1], &lasterr));
+    if(dill_slow(rc < 0)) {err = errno; goto error4;}
     /* RFC says to wait for 50ms for IPv6 result irrespective of whether
        IPv4 address arrives. */
     struct dill_ipaddr addr;
@@ -140,9 +142,8 @@ use_address:
             continue;
         }
         /* Launch the connect attempt. */
-        rc = dill_bundle_go(bndl, dill_happyeyeballs_attempt(addr, ch, &err));
-        if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
-        dill_assert(rc == 0);
+        rc = dill_bundle_go(bndl, dill_happyeyeballs_attempt(addr, ch, &lasterr));
+        if(dill_slow(rc < 0)) {err = errno; goto error4;}
         /* Alternate between IPv4 and IPv6 addresses. */
         if(idx == 0) {
             int tmp = cls[0].ch;
@@ -159,18 +160,26 @@ use_address:
     rc = dill_bundle_wait(bndl, -1);
     if(dill_slow(rc < 0 && errno == ECANCELED)) goto cancel;
     dill_assert(rc == 0);
-    dill_happyeyeballs_fail(ch, err);
+    err = lasterr;
+    goto error4;
 cancel:
+    err = ECANCELED;
+error4:
     rc = dill_hclose(bndl);
     dill_assert(rc == 0);
+error3:
     rc = dill_hclose(chipv4[0]);
     dill_assert(rc == 0);
     rc = dill_hclose(chipv4[1]);
     dill_assert(rc == 0);
+error2:
     rc = dill_hclose(chipv6[0]);
     dill_assert(rc == 0);
     rc = dill_hclose(chipv6[1]);
     dill_assert(rc == 0);
+error1:
+    /* When canceled, nobody is waiting for the outcome any more. */
+    if(err != ECANCELED) dill_happyeyeballs_fail(ch, err);
 }
 
 int dill_happyeyeballs_connect(const char *name, int port, int64_t deadline) {
