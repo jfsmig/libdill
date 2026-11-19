@@ -48,6 +48,8 @@ struct dill_tls_sock {
     unsigned int outdone: 1;
     unsigned int inerr : 1;
     unsigned int outerr : 1;
+    unsigned int rbusy : 1;
+    unsigned int sbusy : 1;
     unsigned int mem : 1;
 };
 
@@ -111,6 +113,8 @@ int dill_tls_attach_client_mem(int s, struct dill_tls_storage *mem,
     self->outdone = 0;
     self->inerr = 0;
     self->outerr = 0;
+    self->rbusy = 0;
+    self->sbusy = 0;
     self->mem = 1;
     /* Initial handshaking. */
     while(1) {
@@ -197,6 +201,8 @@ int dill_tls_attach_server_mem(int s, const char *cert, const char *pkey,
     self->outdone = 0;
     self->inerr = 0;
     self->outerr = 0;
+    self->rbusy = 0;
+    self->sbusy = 0;
     self->mem = 1;
     /* Initial handshaking. */
     while(1) {
@@ -242,6 +248,7 @@ error1:
 int dill_tls_done(int s, int64_t deadline) {
     struct dill_tls_sock *self = dill_hquery(s, dill_tls_type);
     if(dill_slow(!self)) return -1;
+    if(dill_slow(self->sbusy)) {errno = EBUSY; return -1;}
     if(dill_slow(self->outerr)) {errno = ECONNRESET; return -1;}
     if(dill_slow(self->outdone)) {errno = EPIPE; return -1;}
     while(1) {
@@ -260,6 +267,9 @@ int dill_tls_detach(int s, int64_t deadline) {
     int err;
     struct dill_tls_sock *self = dill_hquery(s, dill_tls_type);
     if(dill_slow(!self)) return -1;
+    /* The socket is not closed here, unlike after the other errors: that
+       would free it under the coroutine that is blocked in it. */
+    if(dill_slow(self->rbusy || self->sbusy)) {errno = EBUSY; return -1;}
     if(dill_slow(self->inerr || self->outerr)) {err = ECONNRESET; goto error;}
     /* Start terminal TLS handshake. */
     if(!self->outdone) {
@@ -290,9 +300,11 @@ error:
 static int dill_tls_bsendl(struct dill_bsock_vfs *bvfs,
       struct dill_iolist *first, struct dill_iolist *last, int64_t deadline) {
     struct dill_tls_sock *self = dill_cont(bvfs, struct dill_tls_sock, bvfs);
+    if(dill_slow(self->sbusy)) {errno = EBUSY; return -1;}
     if(dill_slow(self->outdone)) {errno = EPIPE; return -1;}
     if(dill_slow(self->outerr)) {errno = ECONNRESET; return -1;}
     self->deadline = deadline;
+    self->sbusy = 1;
     struct dill_iolist *it = first;
     while(1) {
         uint8_t *base = it->iol_base;
@@ -303,6 +315,7 @@ static int dill_tls_bsendl(struct dill_bsock_vfs *bvfs,
             if(dill_tls_followup(self, rc)) {
                 if(dill_slow(errno != 0)) {
                     self->outerr = 1;
+                    self->sbusy = 0;
                     return -1;
                 }
                 base += rc;
@@ -312,15 +325,18 @@ static int dill_tls_bsendl(struct dill_bsock_vfs *bvfs,
         if(it == last) break;
         it = it->iol_next;
     }
+    self->sbusy = 0;
     return 0;
 }
 
 static int dill_tls_brecvl(struct dill_bsock_vfs *bvfs,
       struct dill_iolist *first, struct dill_iolist *last, int64_t deadline) {
     struct dill_tls_sock *self = dill_cont(bvfs, struct dill_tls_sock, bvfs);
+    if(dill_slow(self->rbusy)) {errno = EBUSY; return -1;}
     if(dill_slow(self->indone)) {errno = EPIPE; return -1;}
     if(dill_slow(self->inerr)) {errno = ECONNRESET; return -1;}
     self->deadline = deadline;
+    self->rbusy = 1;
     struct dill_iolist *it = first;
     while(1) {
         uint8_t *base = it->iol_base;
@@ -332,6 +348,7 @@ static int dill_tls_brecvl(struct dill_bsock_vfs *bvfs,
                 if(dill_slow(errno != 0)) {
                     if(errno == EPIPE) self->indone = 1;
                     else self->inerr = 1;
+                    self->rbusy = 0;
                     return -1;
                 }
                 if(rc == len) break;
@@ -342,6 +359,7 @@ static int dill_tls_brecvl(struct dill_bsock_vfs *bvfs,
         if(it == last) break;
         it = it->iol_next;
     }
+    self->rbusy = 0;
     return 0;
 }
 
