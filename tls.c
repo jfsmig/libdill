@@ -250,6 +250,7 @@ int dill_tls_done(int s, int64_t deadline) {
     if(dill_slow(!self)) return -1;
     if(dill_slow(self->outerr)) {errno = ECONNRESET; return -1;}
     if(dill_slow(self->outdone)) {errno = EPIPE; return -1;}
+    self->deadline = deadline;
     while(1) {
         ERR_clear_error();
         int rc = SSL_shutdown(self->ssl);
@@ -267,6 +268,7 @@ int dill_tls_detach(int s, int64_t deadline) {
     struct dill_tls_sock *self = dill_hquery(s, dill_tls_type);
     if(dill_slow(!self)) return -1;
     if(dill_slow(self->inerr || self->outerr)) {err = ECONNRESET; goto error;}
+    self->deadline = deadline;
     /* Start terminal TLS handshake. */
     if(!self->outdone) {
         int rc = dill_tls_done(s, deadline);

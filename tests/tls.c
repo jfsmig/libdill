@@ -23,6 +23,8 @@
 */
 
 #include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "assert.h"
 #include "../libdill.h"
@@ -127,6 +129,29 @@ coroutine void client2(int u) {
     errno_assert(rc == 0);
 }
 
+coroutine void silent_client(int u) {
+    int s = tls_attach_client(u, -1);
+    errno_assert(s >= 0);
+    int rc = msleep(-1);
+    errno_assert(rc == -1 && errno == ECANCELED);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+}
+
+coroutine void late_detach_client(int u) {
+    int s = tls_attach_client(u, -1);
+    errno_assert(s >= 0);
+    char buf[3];
+    int rc = brecv(s, buf, sizeof(buf), -1);
+    errno_assert(rc == 0);
+    rc = msleep(now() + 100);
+    errno_assert(rc == 0);
+    u = tls_detach(s, -1);
+    errno_assert(u >= 0);
+    rc = hclose(u);
+    errno_assert(rc == 0);
+}
+
 coroutine void client3(int u) {
     int s = tls_attach_client(u, -1);
     errno_assert(s >= 0);
@@ -180,6 +205,73 @@ int main(void) {
     rc = hclose(u[0]);
     errno_assert(rc == 0);
     rc = bundle_wait(cr, -1);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+
+    /* tls_detach() gives up at its deadline if the peer doesn't answer. */
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    cr = go(silent_client(u[1]));
+    errno_assert(cr >= 0);
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    rc = tls_done(s, -1);
+    errno_assert(rc == 0);
+    int64_t deadline = now() + 50;
+    rc = tls_detach(s, deadline);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+    time_assert(now() - deadline, 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+
+    /* tls_detach() waits for the peer's answer until its own deadline,
+       not until the expired deadline of an earlier operation. */
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    cr = go(late_detach_client(u[1]));
+    errno_assert(cr >= 0);
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    rc = bsend(s, "ABC", 3, now() + 10);
+    errno_assert(rc == 0);
+    rc = msleep(now() + 30);
+    errno_assert(rc == 0);
+    u[0] = tls_detach(s, -1);
+    errno_assert(u[0] >= 0);
+    rc = hclose(u[0]);
+    errno_assert(rc == 0);
+    rc = bundle_wait(cr, -1);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+
+    /* tls_done() gives up at its deadline if the peer doesn't read. To make
+       it block, the send buffer is filled up behind the socket's back, via
+       a duplicate of the file descriptor, which ipc_fromfd() has switched
+       to non-blocking mode. */
+    int fds[2];
+    rc = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+    errno_assert(rc == 0);
+    int fd = dup(fds[0]);
+    errno_assert(fd >= 0);
+    u[0] = ipc_fromfd(fds[0]);
+    errno_assert(u[0] >= 0);
+    u[1] = ipc_fromfd(fds[1]);
+    errno_assert(u[1] >= 0);
+    cr = go(silent_client(u[1]));
+    errno_assert(cr >= 0);
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    while(send(fd, "", 1, 0) == 1) {}
+    errno_assert(errno == EAGAIN || errno == EWOULDBLOCK);
+    deadline = now() + 50;
+    rc = tls_done(s, deadline);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+    time_assert(now() - deadline, 0);
+    rc = close(fd);
+    errno_assert(rc == 0);
+    rc = hclose(s);
     errno_assert(rc == 0);
     rc = hclose(cr);
     errno_assert(rc == 0);
