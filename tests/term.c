@@ -101,6 +101,44 @@ int main(void) {
     rc = hclose(p[0]);
     errno_assert(rc == 0);
 
+    /* A message is rejected if it does not fit into a buffer shorter than
+       the terminator. Shorter messages still fit or can be dropped. */
+    rc = ipc_pair(p);
+    errno_assert(rc == 0);
+    p[0] = prefix_attach(p[0], 2, 0);
+    errno_assert(p[0] >= 0);
+    s = prefix_attach(p[1], 2, 0);
+    errno_assert(s >= 0);
+    s = term_attach(s, "STOP", 4);
+    errno_assert(s >= 0);
+    rc = msend(p[0], "ABC", 3, -1);
+    errno_assert(rc == 0);
+    sz = mrecv(s, buf, 2, -1);
+    errno_assert(sz == -1 && errno == EMSGSIZE);
+    rc = msend(p[0], "DE", 2, -1);
+    errno_assert(rc == 0);
+    sz = mrecv(s, buf, 2, -1);
+    errno_assert(sz == 2);
+    assert(buf[0] == 'D' && buf[1] == 'E');
+    rc = msend(p[0], "FG", 2, -1);
+    errno_assert(rc == 0);
+    sz = mrecvl(s, NULL, NULL, -1);
+    errno_assert(sz == 2);
+    /* So can messages longer than the terminator. */
+    rc = msend(p[0], "HIJKLMN", 7, -1);
+    errno_assert(rc == 0);
+    rc = msend(p[0], "OP", 2, -1);
+    errno_assert(rc == 0);
+    sz = mrecvl(s, NULL, NULL, -1);
+    errno_assert(sz == 7);
+    sz = mrecv(s, buf, 2, -1);
+    errno_assert(sz == 2);
+    assert(buf[0] == 'O' && buf[1] == 'P');
+    rc = hclose(s);
+    errno_assert(rc == 0);
+    rc = hclose(p[0]);
+    errno_assert(rc == 0);
+
     return 0;
 }
 
