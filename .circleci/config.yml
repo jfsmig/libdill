@@ -10,19 +10,24 @@ commands:
       cflags: { type: string, default: "" }
       dist: { type: boolean, default: false }
     steps:
+      # Build with all CPUs but one, as nproc --ignore=1 would; macOS has no
+      # nproc. Tests stay serial: run in parallel, they would compete for
+      # ports.
       - run:
           name: Configure
           command: |
             ./autogen.sh
             ./configure << parameters.configure >> CFLAGS="-O3 << parameters.cflags >> -DDILL_SLOW_TESTS"
+            cpus=$(getconf _NPROCESSORS_ONLN)
+            echo "export MAKE_JOBS=$(( cpus > 1 ? cpus - 1 : 1 ))" >> "$BASH_ENV"
       - when:
           condition: << parameters.dist >>
           steps:
-            - run: { name: Build source package, command: make V=1 dist }
+            - run: { name: Build source package, command: make V=1 -j "$MAKE_JOBS" dist }
       - unless:
           condition: << parameters.dist >>
           steps:
-            - run: { name: Build, command: make V=1 }
+            - run: { name: Build, command: make V=1 -j "$MAKE_JOBS" }
             - run: { name: Test, command: make check }
       - run:
           name: Show test logs
@@ -80,10 +85,12 @@ jobs:
             echo "export PATH=\"$(brew --prefix libtool)/libexec/gnubin:\$PATH\"" >> "$BASH_ENV"
             echo "export PKG_CONFIG_PATH=\"$(brew --prefix openssl@3)/lib/pkgconfig\"" >> "$BASH_ENV"
       - run: { name: Generate the build system, command: ./autogen.sh }
+      # As on Linux, builds use all CPUs but one and tests stay serial.
       - run:
           name: Build and test each configuration
           command: |
             failed=
+            cpus=$(getconf _NPROCESSORS_ONLN)
             mkdir -p "$HOME/builds"
             for config in "clang:" \
                           "static:--disable-shared" \
@@ -96,7 +103,7 @@ jobs:
               echo "=== $name"
               (cd "$dir" &&
                ./configure ${config#*:} CFLAGS="-O3 -DDILL_SLOW_TESTS" &&
-               make V=1 &&
+               make V=1 -j $(( cpus > 1 ? cpus - 1 : 1 )) &&
                make check) && status=0 || status=1
               if [ $status != 0 ]; then
                 failed="$failed $name"

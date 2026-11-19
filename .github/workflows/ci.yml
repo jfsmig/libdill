@@ -54,8 +54,12 @@ jobs:
           ./autogen.sh
           ./configure ${{ matrix.configure }} CFLAGS="-O3 ${{ matrix.cflags }} -DDILL_SLOW_TESTS"
 
+      # Use all CPUs but one, as nproc --ignore=1 would; macOS has no nproc.
+      # Tests stay serial: run in parallel, they would compete for ports.
       - name: Build
-        run: make V=1 ${{ matrix.dist && 'dist' || '' }}
+        run: |
+          cpus=$(getconf _NPROCESSORS_ONLN)
+          make V=1 -j $(( cpus > 1 ? cpus - 1 : 1 )) ${{ matrix.dist && 'dist' || '' }}
 
       - name: Test
         if: ${{ !matrix.dist }}
@@ -105,9 +109,11 @@ jobs:
       - name: Generate the build system
         run: ./autogen.sh
 
+      # As on Linux, builds use all CPUs but one and tests stay serial.
       - name: Build and test each configuration
         run: |
           failed=
+          cpus=$(getconf _NPROCESSORS_ONLN)
           for config in "clang:" \
                         "static:--disable-shared" \
                         "nothreads:--disable-threads" \
@@ -119,7 +125,7 @@ jobs:
             echo "::group::$name"
             (cd "$dir" &&
              ./configure ${config#*:} CFLAGS="-O3 -DDILL_SLOW_TESTS" &&
-             make V=1 &&
+             make V=1 -j $(( cpus > 1 ? cpus - 1 : 1 )) &&
              make check) && status=0 || status=1
             echo "::endgroup::"
             if [ $status != 0 ]; then
