@@ -82,7 +82,7 @@ int dill_udp_open_mem(struct dill_ipaddr *local,
     /* Bind it to the local address. */
     if(local) {
         rc = bind(s, dill_ipaddr_sockaddr(local), dill_ipaddr_len(local));
-        if(s < 0) {err = errno; goto error2;}
+        if(dill_slow(rc < 0)) {err = errno; goto error2;}
         /* Get the ephemeral port number. */
         if(dill_ipaddr_port(local) == 0) {
             struct dill_ipaddr baddr;
