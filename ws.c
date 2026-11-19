@@ -119,7 +119,7 @@ int dill_ws_attach_client_mem(int s, int flags, const char *resource,
     char reason[256];
     rc = dill_http_recvstatus(s, reason, sizeof(reason), deadline);
     if(dill_slow(rc < 0)) {err = errno; goto error;}
-    if(dill_slow(rc != 101)) {errno = EPROTO; return -1;}
+    if(dill_slow(rc != 101)) {err = EPROTO; goto error;}
     int has_upgrade = 0;
     int has_connection = 0;
     int has_key = 0;
