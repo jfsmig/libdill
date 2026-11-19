@@ -57,6 +57,20 @@ coroutine void client(int s) {
     errno_assert(rc == 0);
 }
 
+/* Checks that a malformed iolist is rejected. Each attempt gets a socket
+   of its own, because a failed send leaves the socket unusable. */
+static void send_malformed(struct iolist *first, struct iolist *last) {
+    int ss[2];
+    int rc = ipc_pair(ss);
+    errno_assert(rc == 0);
+    rc = bsendl(ss[0], first, last, -1);
+    errno_assert(rc == -1 && errno == EINVAL);
+    rc = hclose(ss[0]);
+    errno_assert(rc == 0);
+    rc = hclose(ss[1]);
+    errno_assert(rc == 0);
+}
+
 int main() {
     int ss[2];
     int rc = ipc_pair(ss);
@@ -96,6 +110,36 @@ int main() {
     rc = bundle_wait(cr, -1);
     errno_assert(rc == 0);
     rc = hclose(cr);
+    errno_assert(rc == 0);
+
+    /* A rejected iolist is handed back unchanged and can be used again. */
+    struct iolist stray = {(void*)"D", 1, NULL, 0};
+    struct iolist tail = {(void*)"C", 1, NULL, 0};
+    struct iolist mid = {(void*)"B", 1, &tail, 0};
+    struct iolist head = {(void*)"A", 1, &mid, 0};
+    /* The last item is not a part of the list. */
+    send_malformed(&head, &stray);
+    assert(!head.iol_rsvd && !mid.iol_rsvd && !tail.iol_rsvd);
+    /* There is a loop in the list. */
+    tail.iol_next = &mid;
+    send_malformed(&head, &stray);
+    assert(!head.iol_rsvd && !mid.iol_rsvd && !tail.iol_rsvd);
+    tail.iol_next = NULL;
+    /* A reserved field is set. */
+    mid.iol_rsvd = 1;
+    send_malformed(&head, &tail);
+    assert(!head.iol_rsvd && mid.iol_rsvd == 1 && !tail.iol_rsvd);
+    mid.iol_rsvd = 0;
+    rc = ipc_pair(ss);
+    errno_assert(rc == 0);
+    rc = bsendl(ss[0], &head, &tail, -1);
+    errno_assert(rc == 0);
+    rc = brecv(ss[1], bufs[0], 3, -1);
+    errno_assert(rc == 0);
+    assert(bufs[0][0] == 'A' && bufs[0][1] == 'B' && bufs[0][2] == 'C');
+    rc = hclose(ss[0]);
+    errno_assert(rc == 0);
+    rc = hclose(ss[1]);
     errno_assert(rc == 0);
     return 0;
 }
