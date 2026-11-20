@@ -63,6 +63,14 @@ coroutine void grow_handle_table(struct hvfs *vfs) {
     }
 }
 
+coroutine void close_again(int h) {
+    /* Let the main coroutine start closing the handle. */
+    int rc = yield();
+    errno_assert(rc == 0);
+    rc = hclose(h);
+    errno_assert(rc == -1 && errno == EBADF);
+}
+
 int main(void) {
 
     struct test t;
@@ -133,6 +141,19 @@ int main(void) {
         rc = hclose(hndls[i]);
         errno_assert(rc == 0);
     }
+
+    /* Closing a bundle lets other coroutines run. To them the handle is
+       already gone: they cannot close it once more. */
+    int bndl = bundle();
+    errno_assert(bndl >= 0);
+    rc = bundle_go(bndl, canceled());
+    errno_assert(rc == 0);
+    int closer = go(close_again(bndl));
+    errno_assert(closer >= 0);
+    rc = hclose(bndl);
+    errno_assert(rc == 0);
+    rc = hclose(closer);
+    errno_assert(rc == 0);
 
     return 0;
 }
