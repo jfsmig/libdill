@@ -41,7 +41,8 @@ struct dill_handle {
     /* Table of virtual functions. */
     struct dill_hvfs *vfs;
     /* Index of the next handle in the linked list of unused handles. -1 means
-       'the end of the list'. -2 means 'handle is in use'. */
+       'the end of the list'. -2 means 'handle is in use'. -3 means 'handle is
+       being closed'. */
     int next;
     /* Cache the last call to hquery. */
     const void *type;
@@ -149,6 +150,9 @@ void *dill_hquery(int h, const void *type) {
 int dill_hclose(int h) {
     struct dill_ctx_handle *ctx = &dill_getctx->handle;
     DILL_CHECKHANDLE(h, -1);
+    /* Closing a bundle runs other coroutines. To them the handle is gone
+       already, so that none of them uses it or closes it once more. */
+    hndl->next = -3;
     /* This will guarantee that blocking functions cannot be called anywhere
        inside the context of the close. */
     int old = dill_no_blocking(1);
