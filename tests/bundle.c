@@ -22,6 +22,9 @@
 
 */
 
+#include <stdint.h>
+#include <string.h>
+
 #include "assert.h"
 #include "../libdill.h"
 
@@ -52,6 +55,32 @@ coroutine void worker5(int ch) {
 coroutine void waiter(int bndl) {
     int rc = bundle_wait(bndl, -1);
     errno_assert(rc == -1 && errno == ECANCELED);
+}
+
+coroutine void waiter_of_closed_bundle(int bndl) {
+    int rc = bundle_wait(bndl, now() + 100);
+    errno_assert(rc == -1 && errno == EPIPE);
+}
+
+/* Test closing a bundle while a coroutine waits for it. The waiter fails at
+   once and leaves the bundle's storage alone from then on. */
+static void test_close_while_waited_for(void) {
+    struct bundle_storage mem;
+    int bndl = bundle_mem(&mem);
+    errno_assert(bndl >= 0);
+    int rc = bundle_go(bndl, worker2());
+    errno_assert(rc == 0);
+    int cr = go(waiter_of_closed_bundle(bndl));
+    errno_assert(cr >= 0);
+    rc = hclose(bndl);
+    errno_assert(rc == 0);
+    memset(&mem, 0xaa, sizeof(mem));
+    rc = bundle_wait(cr, -1);
+    errno_assert(rc == 0);
+    size_t i;
+    for(i = 0; i != sizeof(mem); ++i) assert(((uint8_t*)&mem)[i] == 0xaa);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
 }
 
 int main(void) {
@@ -204,6 +233,8 @@ int main(void) {
     errno_assert(rc == 0);
     rc = hclose(ch[1]);
     errno_assert(rc == 0);
+
+    test_close_while_waited_for();
 
     return 0;
 }
