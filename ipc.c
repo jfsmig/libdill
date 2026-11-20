@@ -241,7 +241,9 @@ int dill_ipc_sendfd(int s, int fd, int64_t deadline) {
        either as a whole or not at all. Only the loss of the peer makes
        the connection unusable for further sending. */
     while(1) {
+        self->sbusy = 1;
         int rc = dill_fdout(self->fd, deadline);
+        self->sbusy = 0;
         if(dill_slow(rc < 0)) return -1;
         ssize_t sz = sendmsg(self->fd, &msg, FD_NOSIGNAL);
         if(dill_fast(sz > 0)) return 0;
@@ -290,7 +292,9 @@ int dill_ipc_recvfd(int s, int64_t deadline) {
     /* A failed attempt consumes nothing from the stream. Only the loss of
        the peer makes the connection unusable for further receiving. */
     while(1) {
+        self->rbusy = 1;
         int rc = dill_fdin(self->fd, deadline);
+        self->rbusy = 0;
         if(dill_slow(rc < 0)) return -1;
         ssize_t sz = recvmsg(self->fd, &msg, 0);
         if(dill_fast(sz > 0)) break;
