@@ -99,7 +99,7 @@ int dill_hmake(struct dill_hvfs *vfs) {
     /* Return first handle from the list of unused handles. */
     int h = ctx->first;
     ctx->first = ctx->handles[h].next;
-    if(dill_slow(ctx->first) == -1) ctx->last = -1;
+    if(dill_slow(ctx->first == -1)) ctx->last = -1;
     ctx->handles[h].vfs = vfs;
     ctx->handles[h].next = -2;
     ctx->handles[h].type = NULL;
