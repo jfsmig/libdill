@@ -83,6 +83,28 @@ static void test_close_while_waited_for(void) {
     errno_assert(rc == 0);
 }
 
+coroutine void first_waiter(int bndl) {
+    int rc = bundle_wait(bndl, -1);
+    errno_assert(rc == 0);
+}
+
+/* Test waiting for a bundle that another coroutine already waits for. The
+   second waiter is refused and the first one is not disturbed. */
+static void test_second_waiter(void) {
+    int bndl = go(worker3(50));
+    errno_assert(bndl >= 0);
+    int cr = go(first_waiter(bndl));
+    errno_assert(cr >= 0);
+    int rc = bundle_wait(bndl, now() + 10);
+    errno_assert(rc == -1 && errno == EBUSY);
+    rc = bundle_wait(cr, now() + 1000);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+    rc = hclose(bndl);
+    errno_assert(rc == 0);
+}
+
 int main(void) {
     int hndl1 = bundle();
     errno_assert(hndl1 >= 0);
@@ -235,6 +257,7 @@ int main(void) {
     errno_assert(rc == 0);
 
     test_close_while_waited_for();
+    test_second_waiter();
 
     return 0;
 }
