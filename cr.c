@@ -124,6 +124,9 @@ static void dill_bundle_close(struct dill_hvfs *vfs) {
         struct dill_cr *cr = dill_cont(it, struct dill_cr, bundle);
         dill_cr_close(&cr->vfs);
     }
+    /* A coroutine still waiting for the bundle must not be left pointing
+       to it. */
+    if(self->waiter) dill_trigger(self->waiter, EPIPE);
     if(!self->mem) free(self);
 }
 
@@ -160,6 +163,8 @@ int dill_bundle_wait(int h, int64_t deadline) {
     if(dill_slow(id < 0)) return -1;
     if(dill_slow(id == 1)) {errno = ETIMEDOUT; return -1;}
     dill_assert(id == 0);
+    /* The bundle may have been closed instead. */
+    if(dill_slow(errno != 0)) return -1;
     return 0;
 }
 
