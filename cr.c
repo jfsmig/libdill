@@ -152,6 +152,8 @@ int dill_bundle_wait(int h, int64_t deadline) {
     if(dill_slow(!self)) return -1;
     /* If there are no coroutines in the bundle succeed immediately. */
     if(dill_list_empty(&self->crs)) return 0;
+    /* The bundle keeps track of one waiter only. */
+    if(dill_slow(self->waiter)) {errno = EBUSY; return -1;}
     /* Otherwise wait for all coroutines to finish. */
     struct dill_bundle_clause bcl;
     bcl.bundle = self;

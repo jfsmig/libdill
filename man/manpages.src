@@ -642,6 +642,7 @@ fxs = [
             the bundle finish or until deadline is reached.
         `,
 
+        errors: ["EBUSY"],
         custom_errors: {
             EPIPE: "The bundle was closed while the function was waiting.",
         },
