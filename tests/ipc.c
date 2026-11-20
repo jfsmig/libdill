@@ -196,6 +196,94 @@ static void test_fromfd_canceled(void) {
     errno_assert(rc == 0);
 }
 
+coroutine void fd_receiver(int s) {
+    int fd = ipc_recvfd(s, -1);
+    errno_assert(fd >= 0);
+    int rc = close(fd);
+    errno_assert(rc == 0);
+}
+
+coroutine void fd_sender(int s) {
+    int rc = ipc_sendfd(s, STDERR_FILENO, -1);
+    errno_assert(rc == 0);
+}
+
+/* Fills the outbound buffer of a non-blocking socket, down to the last byte.
+   Returns the number of bytes written. */
+static size_t fill_socket(int fd) {
+    char filler[4096] = {0};
+    size_t filled = 0;
+    size_t chunk;
+    for(chunk = sizeof(filler); chunk; chunk = chunk == 1 ? 0 : 1) {
+        while(1) {
+            ssize_t sz = send(fd, filler, chunk, 0);
+            if(sz < 0) break;
+            filled += sz;
+        }
+        errno_assert(errno == EAGAIN || errno == EWOULDBLOCK);
+    }
+    return filled;
+}
+
+/* A connection waiting for a file descriptor to arrive, or to leave, is busy
+   in that direction. Another operation is refused there and does no harm. */
+static void test_fd_passing_marks_conn_busy(void) {
+    int s[2];
+    int rc = ipc_pair(s);
+    errno_assert(rc == 0);
+    int cr = go(fd_receiver(s[1]));
+    errno_assert(cr >= 0);
+    char c;
+    rc = brecv(s[1], &c, 1, -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    rc = ipc_sendfd(s[0], STDERR_FILENO, -1);
+    errno_assert(rc == 0);
+    rc = bundle_wait(cr, -1);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+    rc = bsend(s[0], "X", 1, -1);
+    errno_assert(rc == 0);
+    rc = brecv(s[1], &c, 1, -1);
+    errno_assert(rc == 0);
+    assert(c == 'X');
+    rc = hclose(s[0]);
+    errno_assert(rc == 0);
+    rc = hclose(s[1]);
+    errno_assert(rc == 0);
+
+    /* Sending a descriptor blocks only when the transport is full. */
+    int sp[2];
+    rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sp);
+    errno_assert(rc == 0);
+    rc = fcntl(sp[0], F_SETFL, fcntl(sp[0], F_GETFL) | O_NONBLOCK);
+    errno_assert(rc == 0);
+    size_t filled = fill_socket(sp[0]);
+    int sender = ipc_fromfd(sp[0]);
+    errno_assert(sender >= 0);
+    cr = go(fd_sender(sender));
+    errno_assert(cr >= 0);
+    rc = bsend(sender, "X", 1, -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    while(filled) {
+        char sink[4096];
+        ssize_t sz = recv(sp[1], sink,
+            filled < sizeof(sink) ? filled : sizeof(sink), 0);
+        errno_assert(sz > 0);
+        filled -= sz;
+    }
+    rc = bundle_wait(cr, -1);
+    errno_assert(rc == 0);
+    rc = hclose(cr);
+    errno_assert(rc == 0);
+    rc = bsend(sender, "X", 1, -1);
+    errno_assert(rc == 0);
+    rc = hclose(sender);
+    errno_assert(rc == 0);
+    rc = close(sp[1]);
+    errno_assert(rc == 0);
+}
+
 int main() {
     char buf[16];
 
@@ -303,6 +391,7 @@ int main() {
     errno_assert(rc == 0);
 
     test_fromfd_canceled();
+    test_fd_passing_marks_conn_busy();
 
     /* Try skipping some data. */
     rc = ipc_pair(s);
