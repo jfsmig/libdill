@@ -340,6 +340,93 @@ coroutine void late_detach_client(int u) {
     errno_assert(rc == 0);
 }
 
+coroutine void blocked_done(int s) {
+    int rc = tls_done(s, now() + 100);
+    errno_assert(rc == -1 && errno == ETIMEDOUT);
+}
+
+coroutine void blocked_detach(int s) {
+    int u = tls_detach(s, -1);
+    errno_assert(u >= 0);
+    int rc = hclose(u);
+    errno_assert(rc == 0);
+}
+
+coroutine void slow_detach_client(int u) {
+    int s = tls_attach_client(u, -1);
+    errno_assert(s >= 0);
+    int rc = msleep(now() + 50);
+    errno_assert(rc == 0);
+    u = tls_detach(s, -1);
+    errno_assert(u >= 0);
+    rc = hclose(u);
+    errno_assert(rc == 0);
+}
+
+/* While a coroutine is blocked shutting the socket down, the others get
+   EBUSY, instead of working on the TLS state, or freeing the socket, under
+   it. */
+static void test_busy_shutdown(void) {
+    /* tls_done() blocks because the send buffer is filled up behind the
+       socket's back, as in the test of the tls_done() deadline. */
+    int fds[2];
+    int rc = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+    errno_assert(rc == 0);
+    int fd = dup(fds[0]);
+    errno_assert(fd >= 0);
+    int u[2];
+    u[0] = ipc_fromfd(fds[0]);
+    errno_assert(u[0] >= 0);
+    u[1] = ipc_fromfd(fds[1]);
+    errno_assert(u[1] >= 0);
+    int peer = go(silent_client(u[1]));
+    errno_assert(peer >= 0);
+    int s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    while(send(fd, "", 1, 0) == 1) {}
+    errno_assert(errno == EAGAIN || errno == EWOULDBLOCK);
+    int closer = go(blocked_done(s));
+    errno_assert(closer >= 0);
+    rc = bsend(s, "X", 1, -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    rc = tls_done(s, -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    rc = tls_detach(s, -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    rc = bundle_wait(closer, -1);
+    errno_assert(rc == 0);
+    rc = hclose(closer);
+    errno_assert(rc == 0);
+    rc = close(fd);
+    errno_assert(rc == 0);
+    rc = hclose(s);
+    errno_assert(rc == 0);
+    rc = hclose(peer);
+    errno_assert(rc == 0);
+
+    /* tls_detach() blocks waiting for the peer to close its side. */
+    rc = ipc_pair(u);
+    errno_assert(rc == 0);
+    peer = go(slow_detach_client(u[1]));
+    errno_assert(peer >= 0);
+    s = tls_attach_server(u[0], "tests/cert.pem", "tests/key.pem", -1);
+    errno_assert(s >= 0);
+    closer = go(blocked_detach(s));
+    errno_assert(closer >= 0);
+    rc = tls_detach(s, -1);
+    errno_assert(rc == -1 && errno == EBUSY);
+    void *p = hquery(s, NULL);
+    errno_assert(p == NULL && errno == ENOTSUP);
+    rc = bundle_wait(closer, -1);
+    errno_assert(rc == 0);
+    rc = bundle_wait(peer, -1);
+    errno_assert(rc == 0);
+    rc = hclose(closer);
+    errno_assert(rc == 0);
+    rc = hclose(peer);
+    errno_assert(rc == 0);
+}
+
 coroutine void client3(int u) {
     int s = tls_attach_client(u, -1);
     errno_assert(s >= 0);
@@ -393,6 +480,7 @@ int main(void) {
     test_concurrent_first_attach();
 #endif
     test_busy();
+    test_busy_shutdown();
     test_receiver_keeps_deadline();
     test_sender_keeps_deadline();
 
