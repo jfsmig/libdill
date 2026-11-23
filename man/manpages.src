@@ -1805,6 +1805,9 @@ fxs = [
         uses_connection: true,
 
         errors: ["EINVAL"],
+        custom_errors: {
+            EPROTO: "The value is empty or contains only spaces.",
+        },
     },
     {
         name: "http_sendrequest",
