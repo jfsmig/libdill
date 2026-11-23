@@ -565,6 +565,7 @@ int dill_ipc_pair_mem(struct dill_ipc_pair_storage *mem, int s[2]) {
     return 0;
 error4:
     rc = dill_hclose(s[0]);
+    dill_assert(rc == 0);
     goto error2;
 error3:
     dill_fd_close(fds[0]);
@@ -601,6 +602,7 @@ int dill_ipc_pair(int s[2]) {
     return 0;
 error6:
     rc = dill_hclose(s[0]);
+    dill_assert(rc == 0);
     free(conn1);
     goto error2;
 error5:
