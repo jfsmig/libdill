@@ -248,13 +248,9 @@ error1:
     return -1;
 }
 
-int dill_tls_done(int s, int64_t deadline) {
-    struct dill_tls_sock *self = dill_hquery(s, dill_tls_type);
-    if(dill_slow(!self)) return -1;
-    if(dill_slow(self->sbusy)) {errno = EBUSY; return -1;}
-    if(dill_slow(self->outerr)) {errno = ECONNRESET; return -1;}
-    if(dill_slow(self->outdone)) {errno = EPIPE; return -1;}
-    self->deadline = deadline;
+/* Sends close_notify to the peer. SSL_shutdown() may block in the BIO
+   meanwhile, so the caller has to keep the other coroutines out. */
+static int dill_tls_send_close_notify(struct dill_tls_sock *self) {
     while(1) {
         ERR_clear_error();
         int rc = SSL_shutdown(self->ssl);
@@ -267,6 +263,19 @@ int dill_tls_done(int s, int64_t deadline) {
     return -1;
 }
 
+int dill_tls_done(int s, int64_t deadline) {
+    struct dill_tls_sock *self = dill_hquery(s, dill_tls_type);
+    if(dill_slow(!self)) return -1;
+    if(dill_slow(self->sbusy)) {errno = EBUSY; return -1;}
+    if(dill_slow(self->outerr)) {errno = ECONNRESET; return -1;}
+    if(dill_slow(self->outdone)) {errno = EPIPE; return -1;}
+    self->deadline = deadline;
+    self->sbusy = 1;
+    int rc = dill_tls_send_close_notify(self);
+    self->sbusy = 0;
+    return rc;
+}
+
 int dill_tls_detach(int s, int64_t deadline) {
     int err;
     struct dill_tls_sock *self = dill_hquery(s, dill_tls_type);
@@ -276,6 +285,9 @@ int dill_tls_detach(int s, int64_t deadline) {
     if(dill_slow(self->rbusy || self->sbusy)) {errno = EBUSY; return -1;}
     if(dill_slow(self->inerr || self->outerr)) {err = ECONNRESET; goto error;}
     self->deadline = deadline;
+    /* From here on, the socket is closed whatever happens, so it stays busy
+       until then. dill_tls_done() only checks that nobody is sending. */
+    self->rbusy = 1;
     /* Start terminal TLS handshake. */
     if(!self->outdone) {
         int rc = dill_tls_done(s, deadline);
