@@ -695,6 +695,9 @@ fxs = [
         has_handle_argument: true,
 
         errors: ["ECANCELED"],
+        custom_errors: {
+            ENOMEM: "**mem** is too small to hold the coroutine.",
+        },
 
         example: bundle_example,
     },
@@ -1272,6 +1275,10 @@ fxs = [
         epilogue: go_info,
 
         errors: ["ECANCELED"],
+        custom_errors: {
+            ENOMEM: "Not enough memory, or **mem** is too small to hold " +
+                    "the coroutine.",
+        },
 
         example: `
               coroutine void add(int a, int b) {
