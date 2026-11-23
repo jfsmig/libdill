@@ -19,14 +19,14 @@
 <h1 id="name">NAME</h1>
 <p>tcp_listener_fromfd_mem - wraps an existing OS-level file descriptor</p>
 <h1 id="synopsis">SYNOPSIS</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span>
-
-<span class="dt">int</span> tcp_listener_fromfd_mem(
-    <span class="dt">int</span> fd,
-    <span class="kw">struct</span> tcp_listener_storage* mem);</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true"></a><span class="dt">int</span> tcp_listener_fromfd_mem(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true"></a>    <span class="dt">int</span> fd,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true"></a>    <span class="kw">struct</span> tcp_listener_storage* mem);</span></code></pre></div>
 <h1 id="description">DESCRIPTION</h1>
 <p>TCP protocol is a reliable bytestream protocol for transporting data over network. It is defined in RFC 793.</p>
-<p>This function wraps an existing OS-level file descriptor.</p>
+<p>This function wraps an existing OS-level file descriptor. If it fails, the file descriptor is left open and still belongs to the caller; it may have been switched to non-blocking mode.</p>
 <p>This function allows to avoid one dynamic memory allocation by storing the object in user-supplied memory. Unless you are hyper-optimizing use <strong>tcp_listener_fromfd</strong> instead.</p>
 <p><strong>fd</strong>: File descriptor of a listening TCP socket to wrap.</p>
 <p><strong>mem</strong>: The structure to store the newly created object in. It must not be deallocated before the object is closed.</p>
@@ -42,10 +42,10 @@
 <li><strong>ENOMEM</strong>: Not enough memory.</li>
 </ul>
 <h1 id="example">EXAMPLE</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="dt">int</span> fd = socket(AF_INET, SOCK_STREAM, <span class="dv">0</span>);
-bind(fd, addr, <span class="kw">sizeof</span>(addr));
-listen(fd, <span class="dv">10</span>);
-<span class="dt">int</span> s = tcp_listener_fromfd(fd);</code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a><span class="dt">int</span> fd = socket(AF_INET, SOCK_STREAM, <span class="dv">0</span>);</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true"></a>bind(fd, addr, <span class="kw">sizeof</span>(addr));</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a>listen(fd, <span class="dv">10</span>);</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true"></a><span class="dt">int</span> s = tcp_listener_fromfd(fd);</span></code></pre></div>
 <h1 id="see-also">SEE ALSO</h1>
 <p><strong>brecv</strong>(3) <strong>brecvl</strong>(3) <strong>bsend</strong>(3) <strong>bsendl</strong>(3) <strong>hclose</strong>(3) <strong>tcp_accept</strong>(3) <strong>tcp_accept_mem</strong>(3) <strong>tcp_close</strong>(3) <strong>tcp_connect</strong>(3) <strong>tcp_connect_mem</strong>(3) <strong>tcp_done</strong>(3) <strong>tcp_fromfd</strong>(3) <strong>tcp_fromfd_mem</strong>(3) <strong>tcp_listen</strong>(3) <strong>tcp_listen_mem</strong>(3) <strong>tcp_listener_fromfd</strong>(3)</p>
 </body>

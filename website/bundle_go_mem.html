@@ -19,13 +19,13 @@
 <h1 id="name">NAME</h1>
 <p>bundle_go_mem - launches a coroutine within a bundle</p>
 <h1 id="synopsis">SYNOPSIS</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span>
-
-<span class="dt">int</span> bundle_go_mem(
-    <span class="dt">int</span> bndl,
-    expression,
-    <span class="dt">void</span>* mem,
-    <span class="dt">size_t</span> memlen);</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true"></a><span class="dt">int</span> bundle_go_mem(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true"></a>    <span class="dt">int</span> bndl,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true"></a>    expression,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true"></a>    <span class="dt">void</span>* mem,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true"></a>    <span class="dt">size_t</span> memlen);</span></code></pre></div>
 <h1 id="description">DESCRIPTION</h1>
 <p>This construct launches a coroutine within the specified bundle. For more information about bundles see <strong>bundle</strong>.</p>
 <p>The stack for the coroutine is supplied by the user. The stack has no guard page and stack overflow will result in overwriting memory.</p>
@@ -37,27 +37,28 @@
 <p>Any function to be invoked as a coroutine must be declared with the <strong>coroutine</strong> specifier.</p>
 <p>Use <strong>hclose</strong> to cancel the coroutine. When the coroutine is canceled all the blocking calls within the coroutine will start failing with <strong>ECANCELED</strong> error.</p>
 <p><em>WARNING</em>: Coroutines will most likely work even without the coroutine specifier. However, they may fail in random non-deterministic ways, depending on the code in question and the particular combination of compiler and optimization level. Additionally, arguments to a coroutine must not be function calls. If they are, the program may fail non-deterministically. If you need to pass a result of a computation to a coroutine, do the computation first, and then pass the result as an argument. Instead of:</p>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c">go(bar(foo(a)));</code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a>go(bar(foo(a)));</span></code></pre></div>
 <p>Do this:</p>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="dt">int</span> a = foo();
-go(bar(a));</code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true"></a><span class="dt">int</span> a = foo();</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true"></a>go(bar(a));</span></code></pre></div>
 <h1 id="return-value">RETURN VALUE</h1>
 <p>In case of success the function returns 0. In case of error it returns -1 and sets <strong>errno</strong> to one of the values below.</p>
 <h1 id="errors">ERRORS</h1>
 <ul>
 <li><strong>EBADF</strong>: Invalid handle.</li>
 <li><strong>ECANCELED</strong>: Current coroutine was canceled.</li>
+<li><strong>ENOMEM</strong>: <strong>mem</strong> is too small to hold the coroutine.</li>
 <li><strong>ENOTSUP</strong>: The handle does not support this operation.</li>
 </ul>
 <h1 id="example">EXAMPLE</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="dt">int</span> b = bundle();
-bundle_go(b, worker());
-bundle_go(b, worker());
-bundle_go(b, worker());
-<span class="co">/* Give wrokers 1 second to finish. */</span>
-bundle_wait(b, now() + <span class="dv">1000</span>);
-<span class="co">/* Cancel any remaining workers. */</span>
-hclose(b);</code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true"></a><span class="dt">int</span> b = bundle();</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true"></a>bundle_go(b, worker());</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true"></a>bundle_go(b, worker());</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true"></a>bundle_go(b, worker());</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true"></a><span class="co">/* Give wrokers 1 second to finish. */</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true"></a>bundle_wait(b, now() + <span class="dv">1000</span>);</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true"></a><span class="co">/* Cancel any remaining workers. */</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true"></a>hclose(b);</span></code></pre></div>
 <h1 id="see-also">SEE ALSO</h1>
 <p><strong>bundle</strong>(3) <strong>bundle_go</strong>(3) <strong>bundle_mem</strong>(3) <strong>bundle_wait</strong>(3) <strong>go</strong>(3) <strong>go_mem</strong>(3) <strong>yield</strong>(3)</p>
 </body>

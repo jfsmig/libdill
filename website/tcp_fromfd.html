@@ -19,13 +19,13 @@
 <h1 id="name">NAME</h1>
 <p>tcp_fromfd - wraps an existing OS-level file descriptor</p>
 <h1 id="synopsis">SYNOPSIS</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span>
-
-<span class="dt">int</span> tcp_fromfd(
-    <span class="dt">int</span> fd);</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true"></a><span class="dt">int</span> tcp_fromfd(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true"></a>    <span class="dt">int</span> fd);</span></code></pre></div>
 <h1 id="description">DESCRIPTION</h1>
 <p>TCP protocol is a reliable bytestream protocol for transporting data over network. It is defined in RFC 793.</p>
-<p>This function wraps an existing OS-level file descriptor.</p>
+<p>This function wraps an existing OS-level file descriptor. If it fails, the file descriptor is left open and still belongs to the caller; it may have been switched to non-blocking mode.</p>
 <p><strong>fd</strong>: File descriptor of a connected TCP socket to wrap.</p>
 <p>The socket can be cleanly shut down using <strong>tcp_close</strong> function which will also close the underlying file descriptor.</p>
 <p>There's no way to unwrap the file descriptor.</p>
@@ -39,13 +39,13 @@
 <li><strong>ENOMEM</strong>: Not enough memory.</li>
 </ul>
 <h1 id="example">EXAMPLE</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="dt">int</span> fd = socket(AF_INET, SOCK_STREAM, <span class="dv">0</span>);
-connect(fd, addr, <span class="kw">sizeof</span>(addr));
-<span class="dt">int</span> s = tcp_fromfd(fd);
-bsend(s, <span class="st">&quot;ABC&quot;</span>, <span class="dv">3</span>, <span class="dv">-1</span>);
-<span class="dt">char</span> buf[<span class="dv">3</span>];
-brecv(s, buf, <span class="kw">sizeof</span>(buf), <span class="dv">-1</span>);
-tcp_close(s);</code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a><span class="dt">int</span> fd = socket(AF_INET, SOCK_STREAM, <span class="dv">0</span>);</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true"></a>connect(fd, addr, <span class="kw">sizeof</span>(addr));</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a><span class="dt">int</span> s = tcp_fromfd(fd);</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true"></a>bsend(s, <span class="st">&quot;ABC&quot;</span>, <span class="dv">3</span>, -<span class="dv">1</span>);</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true"></a><span class="dt">char</span> buf[<span class="dv">3</span>];</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true"></a>brecv(s, buf, <span class="kw">sizeof</span>(buf), -<span class="dv">1</span>);</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true"></a>tcp_close(s);</span></code></pre></div>
 <h1 id="see-also">SEE ALSO</h1>
 <p><strong>brecv</strong>(3) <strong>brecvl</strong>(3) <strong>bsend</strong>(3) <strong>bsendl</strong>(3) <strong>hclose</strong>(3) <strong>tcp_accept</strong>(3) <strong>tcp_accept_mem</strong>(3) <strong>tcp_close</strong>(3) <strong>tcp_connect</strong>(3) <strong>tcp_connect_mem</strong>(3) <strong>tcp_done</strong>(3) <strong>tcp_fromfd_mem</strong>(3) <strong>tcp_listen</strong>(3) <strong>tcp_listen_mem</strong>(3) <strong>tcp_listener_fromfd</strong>(3) <strong>tcp_listener_fromfd_mem</strong>(3)</p>
 </body>

@@ -19,13 +19,13 @@
 <h1 id="name">NAME</h1>
 <p>http_sendfield - sends HTTP field to the peer</p>
 <h1 id="synopsis">SYNOPSIS</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span>
-
-<span class="dt">int</span> http_sendfield(
-    <span class="dt">int</span> s,
-    <span class="dt">const</span> <span class="dt">char</span>* name,
-    <span class="dt">const</span> <span class="dt">char</span>* value,
-    <span class="dt">int64_t</span> deadline);</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true"></a><span class="dt">int</span> http_sendfield(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true"></a>    <span class="dt">int</span> s,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true"></a>    <span class="dt">const</span> <span class="dt">char</span>* name,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true"></a>    <span class="dt">const</span> <span class="dt">char</span>* value,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true"></a>    <span class="dt">int64_t</span> deadline);</span></code></pre></div>
 <h1 id="description">DESCRIPTION</h1>
 <p><strong>WARNING: This is experimental functionality and the API may change in the future.</strong></p>
 <p>HTTP is an application-level protocol described in RFC 7230. This implementation handles only the request/response exchange. Whatever comes after that must be handled by a different protocol.</p>
@@ -46,24 +46,25 @@
 <li><strong>ECONNRESET</strong>: Broken connection.</li>
 <li><strong>EINVAL</strong>: Invalid argument.</li>
 <li><strong>ENOTSUP</strong>: The handle does not support this operation.</li>
+<li><strong>EPROTO</strong>: The value is empty or contains only spaces.</li>
 <li><strong>ETIMEDOUT</strong>: Deadline was reached.</li>
 </ul>
 <h1 id="example">EXAMPLE</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="dt">int</span> s = tcp_connect(&amp;addr, <span class="dv">-1</span>);
-s = http_attach(s);
-http_sendrequest(s, <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;/&quot;</span>, <span class="dv">-1</span>);
-http_sendfield(s, <span class="st">&quot;Host&quot;</span>, <span class="st">&quot;www.example.org&quot;</span>, <span class="dv">-1</span>);
-http_done(s, <span class="dv">-1</span>);
-<span class="dt">char</span> reason[<span class="dv">256</span>];
-http_recvstatus(s, reason, <span class="kw">sizeof</span>(reason), <span class="dv">-1</span>);
-<span class="cf">while</span>(<span class="dv">1</span>) {
-    <span class="dt">char</span> name[<span class="dv">256</span>];
-    <span class="dt">char</span> value[<span class="dv">256</span>];
-    <span class="dt">int</span> rc = http_recvfield(s, name, <span class="kw">sizeof</span>(name), value, <span class="kw">sizeof</span>(value), <span class="dv">-1</span>);
-    <span class="cf">if</span>(rc == <span class="dv">-1</span> &amp;&amp; errno == EPIPE) <span class="cf">break</span>;
-}
-s = http_detach(s, <span class="dv">-1</span>);
-tcp_close(s);</code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true"></a><span class="dt">int</span> s = tcp_connect(&amp;addr, -<span class="dv">1</span>);</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true"></a>s = http_attach(s);</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true"></a>http_sendrequest(s, <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;/&quot;</span>, -<span class="dv">1</span>);</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true"></a>http_sendfield(s, <span class="st">&quot;Host&quot;</span>, <span class="st">&quot;www.example.org&quot;</span>, -<span class="dv">1</span>);</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true"></a>http_done(s, -<span class="dv">1</span>);</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true"></a><span class="dt">char</span> reason[<span class="dv">256</span>];</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true"></a>http_recvstatus(s, reason, <span class="kw">sizeof</span>(reason), -<span class="dv">1</span>);</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true"></a><span class="cf">while</span>(<span class="dv">1</span>) {</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true"></a>    <span class="dt">char</span> name[<span class="dv">256</span>];</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true"></a>    <span class="dt">char</span> value[<span class="dv">256</span>];</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true"></a>    <span class="dt">int</span> rc = http_recvfield(s, name, <span class="kw">sizeof</span>(name), value, <span class="kw">sizeof</span>(value), -<span class="dv">1</span>);</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true"></a>    <span class="cf">if</span>(rc == -<span class="dv">1</span> &amp;&amp; errno == EPIPE) <span class="cf">break</span>;</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true"></a>}</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true"></a>s = http_detach(s, -<span class="dv">1</span>);</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true"></a>tcp_close(s);</span></code></pre></div>
 <h1 id="see-also">SEE ALSO</h1>
 <p><strong>http_attach</strong>(3) <strong>http_attach_mem</strong>(3) <strong>http_detach</strong>(3) <strong>http_done</strong>(3) <strong>http_recvfield</strong>(3) <strong>http_recvrequest</strong>(3) <strong>http_recvstatus</strong>(3) <strong>http_sendrequest</strong>(3) <strong>http_sendstatus</strong>(3) <strong>now</strong>(3)</p>
 </body>

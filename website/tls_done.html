@@ -19,11 +19,11 @@
 <h1 id="name">NAME</h1>
 <p>tls_done - half-closes a TLS protocol</p>
 <h1 id="synopsis">SYNOPSIS</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span>
-
-<span class="dt">int</span> tls_done(
-    <span class="dt">int</span> s,
-    <span class="dt">int64_t</span> deadline);</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&lt;libdill.h&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true"></a><span class="dt">int</span> tls_done(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true"></a>    <span class="dt">int</span> s,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true"></a>    <span class="dt">int64_t</span> deadline);</span></code></pre></div>
 <h1 id="description">DESCRIPTION</h1>
 <p><strong>WARNING: This is experimental functionality and the API may change in the future.</strong></p>
 <p>TLS is a cryptographic protocol to provide secure communication over the network. It is a bytestream protocol.</p>
@@ -37,19 +37,20 @@
 <h1 id="errors">ERRORS</h1>
 <ul>
 <li><strong>EBADF</strong>: Invalid handle.</li>
+<li><strong>EBUSY</strong>: The handle is currently being used by a different coroutine.</li>
 <li><strong>ECANCELED</strong>: Current coroutine was canceled.</li>
 <li><strong>ENOTSUP</strong>: The handle does not support this operation.</li>
 <li><strong>EPIPE</strong>: The connection was already half-closed.</li>
 <li><strong>ETIMEDOUT</strong>: Deadline was reached.</li>
 </ul>
 <h1 id="example">EXAMPLE</h1>
-<div class="sourceCode"><pre class="sourceCode c"><code class="sourceCode c"><span class="dt">int</span> s = tcp_connect(&amp;addr, <span class="dv">-1</span>);
-s = tls_attach_client(s, <span class="dv">-1</span>);
-bsend(s, <span class="st">&quot;ABC&quot;</span>, <span class="dv">3</span>, <span class="dv">-1</span>);
-<span class="dt">char</span> buf[<span class="dv">3</span>];
-<span class="dt">ssize_t</span> sz = brecv(s, buf, <span class="kw">sizeof</span>(buf), <span class="dv">-1</span>);
-s = tls_detach(s, <span class="dv">-1</span>);
-tcp_close(s);</code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a><span class="dt">int</span> s = tcp_connect(&amp;addr, -<span class="dv">1</span>);</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true"></a>s = tls_attach_client(s, -<span class="dv">1</span>);</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a>bsend(s, <span class="st">&quot;ABC&quot;</span>, <span class="dv">3</span>, -<span class="dv">1</span>);</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true"></a><span class="dt">char</span> buf[<span class="dv">3</span>];</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true"></a><span class="dt">ssize_t</span> sz = brecv(s, buf, <span class="kw">sizeof</span>(buf), -<span class="dv">1</span>);</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true"></a>s = tls_detach(s, -<span class="dv">1</span>);</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true"></a>tcp_close(s);</span></code></pre></div>
 <h1 id="see-also">SEE ALSO</h1>
 <p><strong>brecv</strong>(3) <strong>brecvl</strong>(3) <strong>bsend</strong>(3) <strong>bsendl</strong>(3) <strong>now</strong>(3) <strong>tls_attach_client</strong>(3) <strong>tls_attach_client_mem</strong>(3) <strong>tls_attach_server</strong>(3) <strong>tls_attach_server_mem</strong>(3) <strong>tls_detach</strong>(3)</p>
 </body>
